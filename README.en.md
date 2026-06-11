@@ -145,6 +145,55 @@ codex mcp add mcp-stock-cn -- python -m cn_stock.server
 
 > Environment variables: `DINGTALK_WEBHOOK_URL` / `WECOM_WEBHOOK_URL` / `SERVERCHAN_SENDKEY`
 
+<details>
+<summary><b>⚙️ Alert Setup Guide (click to expand)</b></summary>
+
+### Option 1: DingTalk Bot (Recommended)
+
+1. Create a DingTalk group, go to Group Settings → **Smart Group Assistant** → **Add Bot** → **Custom Bot**
+2. Security: choose **"Custom Keyword"**, enter `stock` (股票)
+3. Copy the Webhook URL
+
+**Windows (permanent):**
+```cmd
+setx DINGTALK_WEBHOOK_URL "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+```
+
+**Restart Codex / Claude Desktop.**
+
+### Option 2: WeCom Bot
+
+Same steps as DingTalk — create group, add bot, get webhook URL:
+
+```cmd
+setx WECOM_WEBHOOK_URL "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+```
+
+### Option 3: ServerChan (WeChat Push)
+
+1. Visit https://sct.ftqq.com/, scan QR code with WeChat
+2. Get your SendKey
+
+```cmd
+setx SERVERCHAN_SENDKEY "SCT_YOUR_KEY"
+```
+
+### Test
+
+Tell AI: *"Alert me if Moutai gains over 3%, push to DingTalk"*
+
+### Persistent Monitoring
+
+Use `run_monitor.py` for background monitoring (checks every 60s):
+
+```bash
+setx DINGTALK_WEBHOOK_URL "https://oapi.dingtalk.com/robot/send?access_token=xxx"
+# Edit WATCHLIST in run_monitor.py, then:
+python run_monitor.py
+```
+
+</details>
+
 ### 🕯️ Charting
 
 | Tool | Description | Required |

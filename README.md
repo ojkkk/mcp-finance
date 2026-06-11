@@ -160,6 +160,65 @@ BOLL(上/中/下轨)、WR(威廉)、BIAS(乖离率)
 
 > 环境变量: `DINGTALK_WEBHOOK_URL` / `WECOM_WEBHOOK_URL` / `SERVERCHAN_SENDKEY`
 
+<details>
+<summary><b>🔧 告警配置详细说明（点击展开）</b></summary>
+
+### 方式一：钉钉机器人（推荐）
+
+1. 打开钉钉，建一个群
+2. 群设置 → **智能群助手** → **添加机器人** → **自定义机器人**
+3. 安全设置选 **"自定义关键词"**，填 `股票`
+4. 复制 `https://oapi.dingtalk.com/robot/send?access_token=xxx` 这段 URL
+
+**Windows 永久配置：**
+```cmd
+setx DINGTALK_WEBHOOK_URL "https://oapi.dingtalk.com/robot/send?access_token=你的token"
+```
+
+**重启 Codex / Claude 后生效。**
+
+### 方式二：企业微信机器人
+
+建群 → 添加群机器人 → 拿到 Webhook URL：
+
+```cmd
+setx WECOM_WEBHOOK_URL "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+```
+
+### 方式三：Server酱（微信推送）
+
+1. 打开 https://sct.ftqq.com/ 微信扫码登录
+2. 拿到 SendKey
+
+```cmd
+setx SERVERCHAN_SENDKEY "SCT你的key"
+```
+
+### 测试告警
+
+配置好后对 AI 说：
+
+> *"帮我盯着茅台，涨超 3% 就钉钉通知我"*
+
+AI 会调用 `set_alert(code="600519", gain_above=3, push_channel="dingtalk")`，钉钉群就会收到消息。
+
+### 持续盯盘脚本
+
+`set_alert` 是**一次性的**（你问一次它检查一次）。要实现真正的后台持续盯盘，可以跑 `run_monitor.py`：
+
+```bash
+# 先配置好环境变量
+setx DINGTALK_WEBHOOK_URL "https://oapi.dingtalk.com/robot/send?access_token=xxx"
+
+# 编辑 run_monitor.py 修改 WATCHLIST（默认盯茅台+宁德）
+# 然后运行：
+python run_monitor.py
+```
+
+它会每 60 秒检查一次 WATCHLIST 里的股票，触发条件就推送告警。
+
+</details>
+
 ### 🕯️ K线图表
 
 | 工具 | 说明 | 必填参数 |
