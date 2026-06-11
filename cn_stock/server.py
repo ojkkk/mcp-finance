@@ -36,6 +36,8 @@ from cn_stock.api import (
     get_sector_ranking,
     guess_secid,
     search_stocks,
+    _fetch_json,
+    _get_tencent_realtime,
 )
 from cn_stock.data import SECTORS, HOT_STOCKS
 from cn_stock.indicators import compute_all_indicators
@@ -364,7 +366,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="plot_kline",
-            description="生成交互式 K 线 HTML 图表（Plotly），含蜡烛图、均线、成交量、MACD/KDJ/RSI 副图，在浏览器中打开",
+            description="⚠️ 生成交互式 K 线 HTML 文件（不是PNG图片！），含蜡烛图+均线+成交量+MACD/KDJ/RSI副图。返回文件路径，请务必用浏览器打开该 HTML 文件查看（支持缩放/平移/悬停查看数值）",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -399,6 +401,14 @@ async def list_tools() -> list[types.Tool]:
                     },
                 },
                 "required": ["code"],
+            },
+        ),
+        types.Tool(
+            name="test_data_sources",
+            description="🧪 诊断所有数据源是否可用（Baostock / 东方财富 / 腾讯），逐项测试并返回状态",
+            inputSchema={
+                "type": "object",
+                "properties": {},
             },
         ),
     ]
@@ -637,17 +647,97 @@ async def call_tool(
                 show_rsi=show_rsi,
             )
             result = {
+                "⚠️重要提示": "这不是图片！这是一个交互式HTML文件，请用浏览器打开下面的路径",
                 "股票": f"{stock_name}({code})",
                 "K线条数": len(klines),
                 "起止日期": f"{klines[0]['日期']} ~ {klines[-1]['日期']}",
-                "HTML路径": output_path,
-                "提示": "在浏览器中打开上述 HTML 文件即可查看交互式 K 线图",
+                "HTML文件路径": output_path,
+                "打开方式": "在文件管理器中找到该文件 → 双击用浏览器打开 → 可缩放/平移/悬停查看每根K线数值",
                 "最新收盘价": klines[-1]["收盘价"],
-                "信号": indicators.get("signals", []),
+                "技术信号": indicators.get("signals", []),
             }
             return [types.TextContent(type="text", text=_format_json(result))]
         except Exception as e:
             return [types.TextContent(type="text", text=f"生成图表失败: {e}")]
+
+    elif name == "test_data_sources":
+        from datetime import datetime, timedelta
+
+        results: dict[str, Any] = {
+            "测试时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "数据源": {},
+        }
+
+        # 1. Baostock
+        try:
+            import baostock as bs
+            lg = bs.login()
+            if lg.error_code == "0":
+                rs = bs.query_history_k_data_plus(
+                    "sh.600519", "date,close",
+                    start_date=(datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
+                    end_date=datetime.now().strftime("%Y-%m-%d"),
+                    frequency="d", adjustflag="2",
+                )
+                rows = []
+                while rs.next():
+                    row = rs.get_row_data()
+                    if row and row[0]:
+                        rows.append(row)
+                bs.logout()
+                results["数据源"]["Baostock"] = {
+                    "状态": "✅ 正常",
+                    "数据条数": len(rows),
+                    "说明": "历史K线 · 量化级数据",
+                }
+            else:
+                results["数据源"]["Baostock"] = {"状态": f"❌ 登录失败", "错误码": lg.error_code}
+        except ImportError:
+            results["数据源"]["Baostock"] = {"状态": "⚠️ 未安装", "修复": "pip install baostock"}
+        except Exception as e:
+            results["数据源"]["Baostock"] = {"状态": f"❌ {e}"}
+
+        # 2. 东方财富 K线
+        try:
+            klines_em = _fetch_json("push2.eastmoney.com", "/api/qt/stock/kline/get", {
+                "secid": "1.600519", "klt": "101", "fqt": "1", "lmt": "5",
+                "fields1": "f1,f2", "fields2": "f51,f52",
+                "ut": "7eea3edcaed734bea9cffc9f32ec1c0c",
+            })
+            if klines_em.get("rc") == 0:
+                cnt = len(klines_em.get("data", {}).get("klines", []))
+                results["数据源"]["东方财富K线"] = {"状态": "✅ 正常", "数据条数": cnt}
+            else:
+                results["数据源"]["东方财富K线"] = {"状态": "❌", "响应": klines_em.get("rc")}
+        except Exception as e:
+            results["数据源"]["东方财富K线"] = {"状态": f"❌ {e}"}
+
+        # 3. 东方财富 实时行情
+        try:
+            quotes = get_realtime_quotations(["1.600519"])
+            results["数据源"]["东方财富实时行情"] = {
+                "状态": "✅ 正常" if quotes else "❌ 返回空",
+            }
+        except Exception as e:
+            results["数据源"]["东方财富实时行情"] = {"状态": f"❌ {e}"}
+
+        # 4. 腾讯财经
+        try:
+            tx = _get_tencent_realtime(["1.600519"])
+            results["数据源"]["腾讯财经"] = {
+                "状态": "✅ 正常" if tx else "❌ 返回空",
+                "数据条数": len(tx) if tx else 0,
+            }
+        except Exception as e:
+            results["数据源"]["腾讯财经"] = {"状态": f"❌ {e}"}
+
+        ok = sum(1 for v in results["数据源"].values() if "✅" in str(v.get("状态", "")))
+        total = len(results["数据源"])
+        results["总结"] = f"{ok}/{total} 数据源可用"
+        if ok == 0:
+            results["建议"] = "所有数据源不可用，请检查网络连接或安装 baostock: pip install baostock"
+
+        return [types.TextContent(type="text", text=_format_json(results))]
 
     else:
         raise ValueError(f"未知工具: {name}")

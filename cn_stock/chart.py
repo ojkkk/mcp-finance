@@ -304,7 +304,7 @@ def generate_kline_chart(
     # ═══════════════════════════════════════════
     # 布局
     # ═══════════════════════════════════════════
-    title = f"{stock_name or '股票'} — K线图"
+    title = f"{stock_name or '股票'} — K线图（交互式HTML · 浏览器打开）"
     fig.update_layout(
         title=dict(text=title, x=0.5, font=dict(size=18)),
         xaxis_rangeslider_visible=False,
@@ -325,7 +325,7 @@ def generate_kline_chart(
         safe_name = stock_name.replace("/", "_").replace("\\", "_") if stock_name else "chart"
         output_path = os.path.join(chart_dir, f"{safe_name}_{ts}.html")
 
-    html = fig.to_html(include_plotlyjs="cdn", full_html=True)
+    html = fig.to_html(include_plotlyjs=True, full_html=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 

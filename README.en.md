@@ -223,6 +223,20 @@ WATCHLIST = [
 
 **Features**: Candlestick + MA5/10/20/60 overlay + Volume + optional MACD/KDJ/RSI subplots, dark theme, zoom/pan/hover
 
+> ⚠️ **This is NOT a PNG image!** `plot_kline` generates an **interactive HTML file** — you MUST open it in a browser.
+> 
+> Files are saved to `%TEMP%/mcp-stock-cn-charts/`. Open in browser to: 🔍 zoom｜ ✋ pan｜ 👆 hover for OHLC values.
+> 
+> Plotly.js is **embedded inline (~3MB)** — works completely offline.
+
+### 🧪 API Diagnostics
+
+| Tool | Description | Required |
+|------|-------------|----------|
+| `test_data_sources` | Check Baostock / EastMoney / Tencent connectivity | — |
+
+Say **"test data sources"** to run diagnostics.
+
 ---
 
 ## 💬 Examples
