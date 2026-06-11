@@ -184,13 +184,34 @@ Tell AI: *"Alert me if Moutai gains over 3%, push to DingTalk"*
 
 ### Persistent Monitoring
 
-Use `run_monitor.py` for background monitoring (checks every 60s):
+Run `run_monitor.py` in the background for persistent monitoring:
 
 ```bash
-setx DINGTALK_WEBHOOK_URL "https://oapi.dingtalk.com/robot/send?access_token=xxx"
-# Edit WATCHLIST in run_monitor.py, then:
 python run_monitor.py
 ```
+
+The script checks your watchlist every 60 seconds and pushes alerts when conditions trigger. Built-in cooldown prevents duplicate notifications.
+
+**Configure your watchlist** by editing `WATCHLIST` in `run_monitor.py`:
+
+```python
+WATCHLIST = [
+    {
+        "code": "600519",          # Moutai
+        "rules": {
+            "price_below": 1500,   # Alert if drops below 1500
+            "macd_death": True,    # MACD death cross
+        },
+        "channel": ["dingtalk"],
+    },
+]
+```
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `INTERVAL_SECONDS` | Check interval (seconds) | 60 |
+| `COOLDOWN_MINUTES` | Cooldown for same alert (minutes) | 30 |
+| `MAX_CONSECUTIVE_ERRORS` | Exit after N consecutive errors | 10 |
 
 </details>
 
