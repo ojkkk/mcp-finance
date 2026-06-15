@@ -296,11 +296,25 @@ mcp-stock-cn/
 - ⏳ **Hong Kong / US stocks** not covered yet
 
 ### Planned
+
+> 📖 See [DEVELOPMENT_REPORT.md](./DEVELOPMENT_REPORT.md) for a comprehensive roadmap and competitive analysis.
+
+**🥇 P0 — High Priority (Near-term)**
+- [ ] **Backtesting MCP Tool** — Integrate Backtrader or lightweight in-house engine
+- [ ] **Screener overhaul** — Expand from 5 to 20+ filter dimensions
+- [ ] **AKShare integration** — 4th data source for dragon-tiger board, block trades, margin & securities lending
+
+**🥈 P1 — Medium Priority (Mid-term differentiation)**
 - [ ] Hong Kong stock real-time quotes
 - [ ] Individual stock money flow (retail/institutional)
-- [ ] Backtesting framework integration (Backtrader / vnpy)
+- [ ] Web Dashboard (FastAPI + lightweight frontend)
+- [ ] Multi-agent analysis (structured research reports)
+
+**🥉 P2 — Long-term Exploration**
+- [ ] Pattern recognition (Wyckoff / head-and-shoulders / cup-and-handle)
 - [ ] Intraday chart / tick-level data
-- [ ] Docker one-click deployment
+- [ ] Docker one-click deployment + PyPI release
+- [ ] MCP Resources expansion (news, analyst reports)
 
 > PRs and Issues are always welcome!
 

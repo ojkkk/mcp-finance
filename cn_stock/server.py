@@ -42,6 +42,7 @@ from cn_stock.api import (
 from cn_stock.data import SECTORS, HOT_STOCKS
 from cn_stock.indicators import compute_all_indicators
 from cn_stock.screener import screen_stocks
+from cn_stock.backtest import run_backtest
 from cn_stock.monitor import evaluate_alert_conditions, push_alerts
 from cn_stock.chart import generate_kline_chart
 
@@ -269,7 +270,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="stock_screener",
-            description="全市场 A 股筛选：按涨跌幅、量比、换手率、市盈率、市值等条件筛选股票，返回匹配列表",
+            description="全市场 A 股筛选：按涨跌幅、量比、换手率、市盈率、市净率、ROE、市值、主力净流入、股息率等条件筛选股票，返回匹配列表",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -297,12 +298,74 @@ async def list_tools() -> list[types.Tool]:
                         "type": "number",
                         "description": "最低总市值（亿元），如 100",
                     },
+                    "min_pb": {
+                        "type": "number",
+                        "description": "最低市净率 PB，如 1.0 表示至少 1 倍",
+                    },
+                    "max_pb": {
+                        "type": "number",
+                        "description": "最高市净率 PB，如 5.0",
+                    },
+                    "min_roe": {
+                        "type": "number",
+                        "description": "最低净资产收益率 ROE(%)，如 10.0",
+                    },
+                    "min_main_inflow": {
+                        "type": "number",
+                        "description": "最低主力净流入（万元），正值表示净流入，如 5000",
+                    },
+                    "min_dividend": {
+                        "type": "number",
+                        "description": "最低股息率(%)，如 3.0",
+                    },
                     "top_n": {
                         "type": "integer",
                         "description": "返回前 N 条",
                         "default": 30,
                     },
                 },
+            },
+        ),
+        types.Tool(
+            name="backtest_strategy",
+            description="策略回测：对指定股票跑历史策略回测，返回收益率、夏普比率、最大回撤、交易记录等绩效统计",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "6位股票代码，如 '600519'",
+                    },
+                    "strategy": {
+                        "type": "string",
+                        "description": "策略名称: ma_cross=双均线交叉, macd_signal=MACD金叉死叉",
+                        "default": "ma_cross",
+                    },
+                    "fast_period": {
+                        "type": "integer",
+                        "description": "快线周期: 均线策略用(MA周期), MACD策略用(fast周期)",
+                        "default": 5,
+                    },
+                    "slow_period": {
+                        "type": "integer",
+                        "description": "慢线周期: 均线策略用(MA周期), MACD策略用(slow周期)",
+                        "default": 20,
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "description": "回测开始日期，如 '2024-01-01'，默认一年前",
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "回测结束日期，如 '2024-12-31'，默认今天",
+                    },
+                    "initial_capital": {
+                        "type": "number",
+                        "description": "初始资金（元），默认 100000",
+                        "default": 100000,
+                    },
+                },
+                "required": ["code"],
             },
         ),
         types.Tool(
@@ -561,9 +624,15 @@ async def call_tool(
         min_turnover = arguments.get("min_turnover")
         max_pe = arguments.get("max_pe")
         min_market_cap = arguments.get("min_market_cap")
+        min_pb = arguments.get("min_pb")
+        max_pb = arguments.get("max_pb")
+        min_roe = arguments.get("min_roe")
+        min_main_inflow = arguments.get("min_main_inflow")
+        min_dividend = arguments.get("min_dividend")
         top_n = min(arguments.get("top_n", 30), 100)
 
-        if not any([min_gain, max_gain, min_volume_ratio, min_turnover, max_pe, min_market_cap]):
+        if not any([min_gain, max_gain, min_volume_ratio, min_turnover, max_pe, min_market_cap,
+                     min_pb, max_pb, min_roe, min_main_inflow, min_dividend]):
             return [types.TextContent(
                 type="text",
                 text="请至少设置一个筛选条件",
@@ -576,7 +645,32 @@ async def call_tool(
             min_turnover=min_turnover,
             max_pe=max_pe,
             min_market_cap=min_market_cap,
+            min_pb=min_pb,
+            max_pb=max_pb,
+            min_roe=min_roe,
+            min_main_inflow=min_main_inflow,
+            min_dividend=min_dividend,
             top_n=top_n,
+        )
+        return [types.TextContent(type="text", text=_format_json(result))]
+
+    elif name == "backtest_strategy":
+        code = arguments["code"]
+        strategy = arguments.get("strategy", "ma_cross")
+        fast_period = arguments.get("fast_period", 5)
+        slow_period = arguments.get("slow_period", 20)
+        start_date = arguments.get("start_date")
+        end_date = arguments.get("end_date")
+        initial_capital = arguments.get("initial_capital", 100000.0)
+
+        result = run_backtest(
+            code=code,
+            strategy=strategy,
+            fast_period=fast_period,
+            slow_period=slow_period,
+            start_date=start_date,
+            end_date=end_date,
+            initial_capital=initial_capital,
         )
         return [types.TextContent(type="text", text=_format_json(result))]
 
@@ -790,7 +884,7 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="mcp-stock-cn",
-                server_version="0.1.0",
+                server_version="0.2.0",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},

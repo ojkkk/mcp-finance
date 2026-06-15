@@ -4,9 +4,12 @@
 筛选维度:
   - 涨跌幅 / 振幅 / 换手率
   - 成交量变化（量比）
-  - 市盈率 / 总市值
+  - 市盈率 / 市净率 / ROE
+  - 总市值 / 主力净流入 / 股息率
 
 数据来源: 东方财富全市场行情接口 (push2.eastmoney.com)
+
+版本: 0.2.0 — 新增 8 个筛选维度
 """
 
 from __future__ import annotations
@@ -14,6 +17,17 @@ import time
 from typing import Any
 
 from cn_stock.api import _fetch_json
+
+
+# 东方财富 push2 接口字段对照
+# ──────────────────────────────────────
+# f2=最新价  f3=涨跌幅(%)  f4=涨跌额  f5=成交量(手)
+# f6=成交额(万)  f7=振幅(%)  f8=换手率(%)  f9=市盈率(动)
+# f10=量比  f12=代码  f14=名称
+# f15=最高  f16=最低  f17=今开  f18=昨收
+# f20=总市值(元)  f21=流通市值(元)
+# f23=市净率(PB)  f37=ROE(%)  f45=股息率(%)
+# f62=主力净流入(万元)
 
 
 def _fetch_all_a_stocks(page: int = 1, page_size: int = 100) -> list[dict[str, Any]]:
@@ -31,7 +45,7 @@ def _fetch_all_a_stocks(page: int = 1, page_size: int = 100) -> list[dict[str, A
                 "invt": "2",
                 "fid": "f3",
                 "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",  # 沪深A股
-                "fields": "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21",
+                "fields": "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f23,f37,f45,f62",
             },
         )
         if data.get("rc") == 0 and data.get("data", {}).get("diff"):
@@ -48,19 +62,30 @@ def screen_stocks(
     min_turnover: float | None = None,
     max_pe: float | None = None,
     min_market_cap: float | None = None,
+    # ── 新增筛选维度（v0.2.0）──
+    min_pb: float | None = None,
+    max_pb: float | None = None,
+    min_roe: float | None = None,
+    min_main_inflow: float | None = None,
+    min_dividend: float | None = None,
     top_n: int = 50,
 ) -> dict[str, Any]:
     """
     按条件筛选 A 股
 
     Args:
-        min_gain:         最低涨跌幅 (%)
-        max_gain:         最高涨跌幅 (%)
-        min_volume_ratio: 最低量比（当日成交量/5日均量）
-        min_turnover:     最低换手率 (%)
-        max_pe:           最高市盈率（动）
-        min_market_cap:   最低总市值（亿元）
-        top_n:            返回前 N 条
+        min_gain:           最低涨跌幅 (%)
+        max_gain:           最高涨跌幅 (%)
+        min_volume_ratio:   最低量比（当日成交量/5日均量）
+        min_turnover:       最低换手率 (%)
+        max_pe:             最高市盈率（动）
+        min_market_cap:     最低总市值（亿元）
+        min_pb:             最低市净率 (倍)
+        max_pb:             最高市净率 (倍)
+        min_roe:            最低净资产收益率 ROE (%)
+        min_main_inflow:    最低主力净流入（万元），正值表示净流入
+        min_dividend:       最低股息率 (%)
+        top_n:              返回前 N 条
 
     Returns:
         {"matched": [...], "total_scanned": int, "conditions": {...}}
@@ -84,6 +109,12 @@ def screen_stocks(
         "min_turnover": min_turnover,
         "max_pe": max_pe,
         "min_market_cap": min_market_cap,
+        # 新增条件
+        "min_pb": min_pb,
+        "max_pb": max_pb,
+        "min_roe": min_roe,
+        "min_main_inflow": min_main_inflow,
+        "min_dividend": min_dividend,
     }
 
     def _f(val: Any) -> float | None:
@@ -105,8 +136,13 @@ def screen_stocks(
         turnover = _f(item.get("f8"))
         pe = _f(item.get("f9"))
         market_cap = _f(item.get("f20"))
+        # 新增字段
+        pb = _f(item.get("f23"))
+        roe = _f(item.get("f37"))
+        dividend = _f(item.get("f45"))
+        main_inflow = _f(item.get("f62"))
 
-        # 过滤
+        # 过滤 — 原有
         if min_gain is not None and (gain is None or gain < min_gain):
             continue
         if max_gain is not None and (gain is not None and gain > max_gain):
@@ -120,6 +156,18 @@ def screen_stocks(
         if min_market_cap is not None and (market_cap is None or market_cap < min_market_cap * 1e8):
             continue
 
+        # 过滤 — 新增
+        if min_pb is not None and (pb is None or pb < min_pb):
+            continue
+        if max_pb is not None and (pb is not None and pb > max_pb):
+            continue
+        if min_roe is not None and (roe is None or roe < min_roe):
+            continue
+        if min_main_inflow is not None and (main_inflow is None or main_inflow < min_main_inflow):
+            continue
+        if min_dividend is not None and (dividend is None or dividend < min_dividend):
+            continue
+
         matched.append({
             "代码": code,
             "名称": name,
@@ -129,7 +177,11 @@ def screen_stocks(
             "换手率(%)": turnover,
             "振幅(%)": _f(item.get("f7")),
             "市盈率(动)": pe,
-            "总市值": market_cap,
+            "市净率(PB)": pb,
+            "ROE(%)": roe,
+            "股息率(%)": dividend,
+            "主力净流入(万元)": main_inflow,
+            "总市值(元)": market_cap,
             "今开": item.get("f17"),
             "最高": item.get("f15"),
             "最低": item.get("f16"),

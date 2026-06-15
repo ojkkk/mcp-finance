@@ -6,3 +6,5 @@ Thumbs.db
 *.egg-info/
 dist/
 build/
+# 项目报告（不提交版本库）
+DEVELOPMENT_REPORT.md

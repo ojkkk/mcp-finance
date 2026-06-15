@@ -1,7 +1,7 @@
 [project]
 name = "mcp-stock-cn"
-version = "0.1.0"
-description = "中国股市实时行情 MCP — A股/港股实时行情、K线、财报、板块排行、北向资金，基于东方财富 API"
+version = "0.2.0"
+description = "中国股市实时行情 MCP — A股/港股实时行情、K线、财报、板块排行、北向资金，基于东方财富 API，内建策略回测引擎"
 authors = [{name = "mcp-stock-cn"}]
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -11,6 +11,9 @@ dependencies = [
     "baostock>=0.8.8",
     "plotly>=5.0",
 ]
+
+[project.optional-dependencies]
+backtest = ["numpy>=1.20"]
 
 [project.urls]
 homepage = "https://github.com/ojkkk/mcp-stock-cn"
