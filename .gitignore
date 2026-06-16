@@ -8,3 +8,5 @@ dist/
 build/
 # 项目报告（不提交版本库）
 DEVELOPMENT_REPORT.md
+# 生成的图表
+charts/

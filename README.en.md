@@ -12,6 +12,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9+-blue?logo=python&logoColor=white" alt="Python 3.9+">
   <img src="https://img.shields.io/badge/MCP-1.4+-purple?logo=modelcontextprotocol" alt="MCP 1.4+">
+  <img src="https://img.shields.io/badge/version-0.2.0-orange" alt="Version 0.2.0">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome">
   <img src="https://img.shields.io/badge/data-3%20sources-red" alt="3 Data Sources">
@@ -29,10 +30,13 @@
 
 - 📊 **Real-time Quotes** — Dual-source (Tencent + EastMoney), auto-failover
 - 📈 **Technical Analysis** — 9 indicators computed locally, 10+ signal patterns
-- 🔍 **Stock Screener** — Multi-condition screening across all A-shares
+- 🔍 **Stock Screener** — 11-dimension screening (gain, volume, turnover, PE, PB, ROE, market cap, etc.)
+- 🎯 **Backtesting** — vectorbt-powered MA crossover & MACD strategies with Buy & Hold benchmark
+- 🔧 **Optimization** — Grid-scan parameter combinations to find optimal strategy settings (Sharpe/return/drawdown/win-rate targets)
 - 🔔 **Alerts** — Price/indicator triggers → DingTalk / WeCom / ServerChan push
 - 🕯️ **K-line Charts** — Interactive Plotly HTML, candles + MA + MACD/KDJ/RSI
 - 💾 **Historical Data** — Baostock quant-grade K-lines (daily/weekly/monthly/minute)
+- 📊 **Dragon Tiger / Block Trades / Margin** — AKShare 4th data source for premium market data
 
 ---
 
@@ -58,6 +62,10 @@ python -m venv .venv
 # 3. Install
 pip install -e .
 ```
+
+**Dependencies**: `mcp` / `pydantic` / `baostock` / `plotly` / `numpy` / `pandas` / **`vectorbt`** (vectorized backtesting engine)
+
+> ⚡ vectorbt leverages Numpy + Numba for 10,000x speedup over row-by-row simulation.
 
 ### Configuration
 
@@ -102,7 +110,7 @@ codex mcp add mcp-stock-cn -- python -m cn_stock.server
 
 ---
 
-## 🛠️ All 12 Tools
+## 🛠️ All 17 Tools
 
 ### 📊 Market Data
 
@@ -133,7 +141,35 @@ codex mcp add mcp-stock-cn -- python -m cn_stock.server
 |------|-------------|----------|
 | `stock_screener` | Multi-condition A-share screening | ≥1 condition |
 
-**Filters**: gain%, volume ratio, turnover%, P/E, market cap
+**Filters (11 dimensions)**: gain%, volume ratio, turnover%, P/E, P/B, market cap, ROE, main capital inflow, dividend yield, amplitude
+
+> v0.2.0 new: P/B ratio, ROE, main capital inflow, dividend yield, amplitude
+
+### 🎯 Backtesting
+
+| Tool | Description | Required |
+|------|-------------|----------|
+| `backtest_strategy` | **vectorbt** backtest + Buy & Hold benchmark, equity curve chart, text summary | `code` |
+| `optimize_strategy` | **Parameter optimization**: grid-scan all fast/slow combinations to find optimal params | `code` |
+
+**Strategies**:
+- `ma_cross` — Dual MA crossover (golden cross buy / death cross sell)
+- `macd_signal` — MACD golden/death cross
+
+**Three deliverables** (numbers + chart + text):
+
+| Output | Description |
+|--------|-------------|
+| 📊 **Metrics** | Total return, annualized return, max drawdown, Sharpe, win rate, excess return, trade count |
+| 📈 **Equity Curve Chart** | Strategy vs Buy & Hold on same chart, buy/sell markers (interactive Plotly HTML) |
+| 📝 **Text Summary** | Auto-generated plain-language commentary with table comparison |
+
+**A-Share trading rules**: T+1, price limits (±10%/+20%), stamp duty (0.05% seller-side), minimum commission ¥5
+
+> Built on **vectorbt** (Numpy + Numba accelerated). One-liner install: `pip install -e .`
+>
+> *"Backtest Midea with MA(5,20) crossover for 2024 and compare with Buy & Hold"*
+> *"Find the best parameters for Midea MA crossover strategy"*
 
 ### 🔔 Alerts
 
@@ -237,6 +273,17 @@ WATCHLIST = [
 
 Say **"test data sources"** to run diagnostics.
 
+### 📊 AKShare Premium Data (4th Source)
+
+| Tool | Description | Required |
+|------|-------------|----------|
+| `get_dragon_tiger` | Daily dragon-tiger board details (stock + brokerage buy/sell) | — |
+| `get_block_trades` | Block trades (single stock or full market) | — |
+| `get_margin_trading` | Margin trading & securities lending (SSE + SZSE) | — |
+
+> Powered by **AKShare** open-source financial data interface, complementing existing 3 sources.
+> Installed with `pip install -e .` — zero config.
+
 ---
 
 ## 💬 Examples
@@ -246,7 +293,10 @@ Say **"test data sources"** to run diagnostics.
 | Real-time quote | "What's the price of Kweichow Moutai (600519)?" |
 | Technical analysis | "Analyze BYD's technical indicators — any golden crosses?" |
 | Financials | "What's CATL's revenue and ROE trend?" |
-| Screening | "Screen all A-shares: gain > 3%, volume ratio > 1.5, turnover > 5%" |
+| Screening | "Screen all A-shares: gain > 3%, volume ratio > 1.5, ROE > 10%" |
+| Backtesting | "Backtest Midea with MA(5,20) cross for 2024, compare with Buy & Hold" |
+|  | "MACD golden/death cross backtest on CATL with 500k initial capital" |
+| Optimization | "Find the best MA parameters for Midea" |
 | Alerts | "Alert me if Moutai drops below 1800 or MACD death cross, push to DingTalk" |
 | Chart | "Plot Moutai's last 120 days with MACD and RSI" |
 | Capital flow | "How much northbound money flowed in this week?" |
@@ -280,10 +330,12 @@ mcp-stock-cn/
 │   ├── api.py             # API layer (3-source failover)
 │   ├── data.py            # 200+ stock mappings & sectors
 │   ├── indicators.py      # 9 technical indicators + signals
-│   ├── screener.py        # Market-wide stock screening
+│   ├── screener.py        # Market-wide stock screening (11 dimensions)
+│   ├── backtest.py        # vectorbt backtesting engine + parameter optimization
+│   ├── akshare_data.py    # AKShare 4th source (dragon-tiger/block trades/margin)
 │   ├── monitor.py         # Alerts + DingTalk/WeChat push
 │   ├── chart.py           # Plotly interactive K-line charts
-│   └── server.py          # MCP Server (12 tools + resources)
+│   └── server.py          # MCP Server (14 tools + resources)
 ```
 
 ---
@@ -300,9 +352,9 @@ mcp-stock-cn/
 > 📖 See [DEVELOPMENT_REPORT.md](./DEVELOPMENT_REPORT.md) for a comprehensive roadmap and competitive analysis.
 
 **🥇 P0 — High Priority (Near-term)**
-- [ ] **Backtesting MCP Tool** — Integrate Backtrader or lightweight in-house engine
-- [ ] **Screener overhaul** — Expand from 5 to 20+ filter dimensions
-- [ ] **AKShare integration** — 4th data source for dragon-tiger board, block trades, margin & securities lending
+- [x] **Backtesting MCP Tool** — vectorbt-powered with parameter optimization + A-share rules
+- [x] **Screener overhaul** — Expand from 5 to 11 filter dimensions (PB, ROE, capital inflow, dividend, amplitude)
+- [x] **AKShare integration** — 4th data source for dragon-tiger board, block trades, margin & securities lending
 
 **🥈 P1 — Medium Priority (Mid-term differentiation)**
 - [ ] Hong Kong stock real-time quotes

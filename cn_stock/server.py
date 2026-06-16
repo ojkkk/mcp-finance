@@ -42,9 +42,9 @@ from cn_stock.api import (
 from cn_stock.data import SECTORS, HOT_STOCKS
 from cn_stock.indicators import compute_all_indicators
 from cn_stock.screener import screen_stocks
-from cn_stock.backtest import run_backtest
+from cn_stock.backtest import run_backtest, optimize_backtest
 from cn_stock.monitor import evaluate_alert_conditions, push_alerts
-from cn_stock.chart import generate_kline_chart
+from cn_stock.chart import generate_kline_chart, generate_backtest_chart
 
 server = Server("mcp-stock-cn")
 
@@ -364,6 +364,32 @@ async def list_tools() -> list[types.Tool]:
                         "description": "初始资金（元），默认 100000",
                         "default": 100000,
                     },
+                    "generate_chart": {
+                        "type": "boolean",
+                        "description": "是否生成权益曲线对比图（策略 vs 基准），默认 true",
+                        "default": True,
+                    },
+                },
+                "required": ["code"],
+            },
+        ),
+        types.Tool(
+            name="optimize_strategy",
+            description="参数优化：网格扫描策略参数组合，自动找出最优参数（基于 vectorbt 向量化引擎）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "6位股票代码，如 '000333'"},
+                    "strategy": {"type": "string", "description": "策略: ma_cross=双均线, macd_signal=MACD", "default": "ma_cross"},
+                    "fast_min": {"type": "integer", "description": "快线最小值", "default": 5},
+                    "fast_max": {"type": "integer", "description": "快线最大值", "default": 20},
+                    "fast_step": {"type": "integer", "description": "快线步长", "default": 5},
+                    "slow_min": {"type": "integer", "description": "慢线最小值", "default": 20},
+                    "slow_max": {"type": "integer", "description": "慢线最大值", "default": 60},
+                    "slow_step": {"type": "integer", "description": "慢线步长", "default": 10},
+                    "start_date": {"type": "string", "description": "开始日期，如 '2024-01-01'"},
+                    "end_date": {"type": "string", "description": "结束日期，如 '2024-12-31'"},
+                    "metric": {"type": "string", "description": "优化目标: sharpe/return/mdd/win_rate", "default": "sharpe"},
                 },
                 "required": ["code"],
             },
@@ -464,6 +490,40 @@ async def list_tools() -> list[types.Tool]:
                     },
                 },
                 "required": ["code"],
+            },
+        ),
+        # ── AKShare 第四数据源 ──
+        types.Tool(
+            name="get_dragon_tiger",
+            description="龙虎榜明细：每日上榜股票的营业部买卖金额、净买入等（AKShare 新浪数据源）",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string", "description": "日期 YYYYMMDD，如 '20250613'，默认今天"},
+                },
+            },
+        ),
+        types.Tool(
+            name="get_block_trades",
+            description="大宗交易：单只股票或全市场的大宗交易明细，含成交价/折溢价率等",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string", "description": "股票代码，如 '000333'；留空返回全市场"},
+                    "start_date": {"type": "string", "description": "开始日期 YYYY-MM-DD"},
+                    "end_date": {"type": "string", "description": "结束日期 YYYY-MM-DD"},
+                },
+            },
+        ),
+        types.Tool(
+            name="get_margin_trading",
+            description="融资融券（两融）：沪深两市个股融资余额、融券余量、融资买入额等",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "market": {"type": "string", "description": "市场: sh=上证 sz=深证 all=两市，默认 all"},
+                    "date": {"type": "string", "description": "日期 YYYYMMDD，如 '20250613'，默认今天"},
+                },
             },
         ),
         types.Tool(
@@ -662,6 +722,7 @@ async def call_tool(
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
         initial_capital = arguments.get("initial_capital", 100000.0)
+        generate_chart = arguments.get("generate_chart", True)
 
         result = run_backtest(
             code=code,
@@ -671,6 +732,48 @@ async def call_tool(
             start_date=start_date,
             end_date=end_date,
             initial_capital=initial_capital,
+        )
+
+        # 生成权益曲线对比图
+        if generate_chart and "error" not in result and "权益曲线" in result:
+            try:
+                stock_name = result["股票"]
+                chart_path = generate_backtest_chart(
+                    stock_name=stock_name,
+                    strategy_label=result["策略"],
+                    strategy_curve=result["权益曲线"],
+                    benchmark_curve=result["基准(买入持有)"]["权益曲线"] if "基准(买入持有)" in result else None,
+                    trades=result.get("交易记录", []),
+                    initial_capital=initial_capital,
+                )
+                result["权益曲线图"] = chart_path
+                result["权益曲线图提示"] = "这不是图片！这是一个交互式HTML文件，请用浏览器打开"
+            except Exception as e:
+                result["权益曲线图"] = f"图表生成失败: {e}"
+
+        return [types.TextContent(type="text", text=_format_json(result))]
+
+    elif name == "optimize_strategy":
+        code = arguments["code"]
+        strategy = arguments.get("strategy", "ma_cross")
+        fast_min = arguments.get("fast_min", 5)
+        fast_max = arguments.get("fast_max", 20)
+        fast_step = arguments.get("fast_step", 5)
+        slow_min = arguments.get("slow_min", 20)
+        slow_max = arguments.get("slow_max", 60)
+        slow_step = arguments.get("slow_step", 10)
+        start_date = arguments.get("start_date")
+        end_date = arguments.get("end_date")
+        metric = arguments.get("metric", "sharpe")
+
+        fast_range = list(range(fast_min, fast_max + 1, fast_step))
+        slow_range = list(range(slow_min, slow_max + 1, slow_step))
+
+        result = optimize_backtest(
+            code=code, strategy=strategy,
+            fast_range=fast_range, slow_range=slow_range,
+            start_date=start_date, end_date=end_date,
+            metric=metric,
         )
         return [types.TextContent(type="text", text=_format_json(result))]
 
@@ -753,6 +856,29 @@ async def call_tool(
             return [types.TextContent(type="text", text=_format_json(result))]
         except Exception as e:
             return [types.TextContent(type="text", text=f"生成图表失败: {e}")]
+
+    # ── AKShare 第四数据源 ──
+    elif name == "get_dragon_tiger":
+        from cn_stock.akshare_data import get_dragon_tiger
+        result = get_dragon_tiger(date=arguments.get("date"))
+        return [types.TextContent(type="text", text=_format_json(result))]
+
+    elif name == "get_block_trades":
+        from cn_stock.akshare_data import get_block_trades
+        result = get_block_trades(
+            symbol=arguments.get("symbol"),
+            start_date=arguments.get("start_date"),
+            end_date=arguments.get("end_date"),
+        )
+        return [types.TextContent(type="text", text=_format_json(result))]
+
+    elif name == "get_margin_trading":
+        from cn_stock.akshare_data import get_margin_trading
+        result = get_margin_trading(
+            market=arguments.get("market", "all"),
+            date=arguments.get("date"),
+        )
+        return [types.TextContent(type="text", text=_format_json(result))]
 
     elif name == "test_data_sources":
         from datetime import datetime, timedelta
@@ -861,9 +987,24 @@ def _resolve_secid(code: str) -> str:
 
 
 def _format_json(data: Any) -> str:
-    """格式化 JSON 输出"""
+    """格式化 JSON 输出（兼容 numpy 类型）"""
     import json
-    return json.dumps(data, ensure_ascii=False, indent=2)
+    try:
+        import numpy as np
+        class _NPEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, (np.integer,)):
+                    return int(obj)
+                if isinstance(obj, (np.floating,)):
+                    return float(obj)
+                if isinstance(obj, (np.bool_,)):
+                    return bool(obj)
+                if isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                return super().default(obj)
+        return json.dumps(data, ensure_ascii=False, indent=2, cls=_NPEncoder)
+    except ImportError:
+        return json.dumps(data, ensure_ascii=False, indent=2)
 
 
 # ═════════════════════════════════════════════════════════════════════

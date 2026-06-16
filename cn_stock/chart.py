@@ -10,7 +10,6 @@ Plotly 交互式 K 线图生成模块
 
 from __future__ import annotations
 import os
-import tempfile
 from datetime import datetime
 from typing import Any
 
@@ -320,11 +319,133 @@ def generate_kline_chart(
 
     # ── 输出 HTML ──
     if not output_path:
-        chart_dir = os.path.join(tempfile.gettempdir(), "mcp-stock-cn-charts")
+        chart_dir = os.path.join(os.getcwd(), "charts")
         os.makedirs(chart_dir, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_name = stock_name.replace("/", "_").replace("\\", "_") if stock_name else "chart"
         output_path = os.path.join(chart_dir, f"{safe_name}_{ts}.html")
+
+    html = fig.to_html(include_plotlyjs=True, full_html=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    return os.path.abspath(output_path)
+
+
+def generate_backtest_chart(
+    stock_name: str,
+    strategy_label: str,
+    strategy_curve: list[dict[str, Any]],
+    benchmark_curve: list[dict[str, Any]] | None = None,
+    trades: list[dict[str, Any]] | None = None,
+    initial_capital: float = 100000.0,
+    output_path: str | None = None,
+) -> str:
+    """
+    生成回测权益曲线对比图（策略 vs 基准）
+
+    Args:
+        stock_name:       股票名称
+        strategy_label:   策略名称标签
+        strategy_curve:   策略权益曲线 [{"日期": str, "市值": float}, ...]
+        benchmark_curve:  基准权益曲线（买入持有）
+        trades:           交易记录（用于标注买卖点）
+        initial_capital:  初始资金
+        output_path:      输出 HTML 路径，默认 %TEMP%/mcp-stock-cn-charts/
+
+    Returns:
+        HTML 文件路径
+    """
+    fig = go.Figure()
+
+    # ── 策略权益曲线 ──
+    dates = [p["日期"] for p in strategy_curve]
+    strat_values = [p["市值"] for p in strategy_curve]
+
+    fig.add_trace(go.Scatter(
+        x=dates,
+        y=strat_values,
+        mode="lines",
+        name=strategy_label,
+        line=dict(color="#00d4ff", width=2),
+        hovertemplate="%{x}<br>策略: %{y:.2f}<extra></extra>",
+    ))
+
+    # ── 基准权益曲线 ──
+    if benchmark_curve:
+        bh_dates = [p["日期"] for p in benchmark_curve]
+        bh_values = [p["市值"] for p in benchmark_curve]
+        fig.add_trace(go.Scatter(
+            x=bh_dates,
+            y=bh_values,
+            mode="lines",
+            name="买入持有(基准)",
+            line=dict(color="#ffa600", width=2, dash="dash"),
+            hovertemplate="%{x}<br>基准: %{y:.2f}<extra></extra>",
+        ))
+
+    # ── 初始资金基线 ──
+    fig.add_hline(
+        y=initial_capital,
+        line=dict(color="#666", width=1, dash="dot"),
+        annotation_text=f"初始资金 {initial_capital:,.0f}",
+        annotation_position="bottom right",
+    )
+
+    # ── 买卖点标注 ──
+    if trades:
+        buy_dates = []
+        buy_values = []
+        sell_dates = []
+        sell_values = []
+        for t in trades:
+            if t["动作"] == "买入":
+                buy_dates.append(t["日期"])
+                buy_values.append(t["金额"])
+            elif t["动作"] in ("卖出", "平仓"):
+                sell_dates.append(t["日期"])
+                sell_values.append(t["金额"])
+
+        if buy_dates:
+            fig.add_trace(go.Scatter(
+                x=buy_dates,
+                y=buy_values,
+                mode="markers",
+                name="买入",
+                marker=dict(color="#00ff88", size=10, symbol="triangle-up"),
+                hovertemplate="买入: %{x}<br>金额: %{y:.2f}<extra></extra>",
+            ))
+        if sell_dates:
+            fig.add_trace(go.Scatter(
+                x=sell_dates,
+                y=sell_values,
+                mode="markers",
+                name="卖出",
+                marker=dict(color="#ff4466", size=10, symbol="triangle-down"),
+                hovertemplate="卖出: %{x}<br>金额: %{y:.2f}<extra></extra>",
+            ))
+
+    # ── 布局 ──
+    fig.update_layout(
+        title=f"回测权益曲线 — {stock_name}",
+        xaxis_title="日期",
+        yaxis_title="总资金(元)",
+        template="plotly_dark",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=10, r=10, t=60, b=10),
+        height=500,
+    )
+    fig.update_xaxes(showgrid=True, gridcolor="#333")
+    fig.update_yaxes(showgrid=True, gridcolor="#333", tickformat=",.0f")
+
+    # ── 输出 HTML ──
+    if not output_path:
+        chart_dir = os.path.join(os.getcwd(), "charts")
+        os.makedirs(chart_dir, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = stock_name.replace("/", "_").replace("\\", "_")
+        output_path = os.path.join(chart_dir, f"{safe_name}_backtest_{ts}.html")
 
     html = fig.to_html(include_plotlyjs=True, full_html=True)
     with open(output_path, "w", encoding="utf-8") as f:
