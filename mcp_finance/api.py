@@ -79,60 +79,87 @@ def _df_to_records(df, limit=None):
 # ================================================================
 
 def get_realtime_quote_a(code):
-    """A股实时行情"""
+    """A股实时行情 — 优先 Sina 快速接口，失败回退全市场缓存"""
     ak = _get_ak()
+    # 策略1：Sina 单次请求（快，无分页）
+    try:
+        df_sina = ak.stock_zh_a_spot()
+        if df_sina is not None and not df_sina.empty:
+            row = df_sina[df_sina["代码"] == code]
+            if not row.empty:
+                r = row.iloc[0]
+                return {
+                    "代码": code, "名称": r.get("名称", ""),
+                    "最新价": _safe_float(r.get("最新价")),
+                    "涨跌幅": _safe_float(r.get("涨跌幅")),
+                    "涨跌额": _safe_float(r.get("涨跌额")),
+                    "成交量(手)": _safe_float(r.get("成交量")),
+                    "成交额(元)": _safe_float(r.get("成交额")),
+                    "今开": _safe_float(r.get("今开")),
+                    "昨收": _safe_float(r.get("昨收")),
+                    "最高": _safe_float(r.get("最高")),
+                    "最低": _safe_float(r.get("最低")),
+                    "市场": "A股", "数据源": "AKShare-新浪",
+                }
+    except Exception:
+        pass
+
+    # 策略2：全市场缓存（回退，数据更全）
     try:
         df = _cached_spot("a")
-        row = df[df["代码"] == code]
-        if row.empty:
-            try:
-                df_idx = ak.stock_zh_index_spot_em()
-                row_idx = df_idx[df_idx["代码"] == code]
-                if not row_idx.empty:
-                    r = row_idx.iloc[0]
-                    return {
-                        "代码": code, "名称": r.get("名称", ""),
-                        "最新价": _safe_float(r.get("最新价")),
-                        "涨跌幅": _safe_float(r.get("涨跌幅")),
-                        "涨跌额": _safe_float(r.get("涨跌额")),
-                        "成交量(手)": _safe_float(r.get("成交量")),
-                        "成交额(元)": _safe_float(r.get("成交额")),
-                        "今开": _safe_float(r.get("今开")),
-                        "昨收": _safe_float(r.get("昨收")),
-                        "最高": _safe_float(r.get("最高")),
-                        "最低": _safe_float(r.get("最低")),
-                        "市场": "A股指数", "数据源": "AKShare",
-                    }
-            except Exception:
-                pass
-            return {"error": f"未找到股票 {code}"}
-        r = row.iloc[0]
-        return {
-            "代码": code, "名称": r.get("名称", ""),
-            "最新价": _safe_float(r.get("最新价")),
-            "涨跌幅": _safe_float(r.get("涨跌幅")),
-            "涨跌额": _safe_float(r.get("涨跌额")),
-            "成交量(手)": _safe_float(r.get("成交量")),
-            "成交额(元)": _safe_float(r.get("成交额")),
-            "振幅": _safe_float(r.get("振幅")),
-            "换手率": _safe_float(r.get("换手率")),
-            "量比": _safe_float(r.get("量比")),
-            "市盈率": _safe_float(r.get("市盈率-动态")),
-            "市净率": _safe_float(r.get("市净率")),
-            "总市值": _safe_float(r.get("总市值")),
-            "流通市值": _safe_float(r.get("流通市值")),
-            "今开": _safe_float(r.get("今开")),
-            "昨收": _safe_float(r.get("昨收")),
-            "最高": _safe_float(r.get("最高")),
-            "最低": _safe_float(r.get("最低")),
-            "60日涨跌幅": _safe_float(r.get("60日涨跌幅")),
-            "年初至今涨跌幅": _safe_float(r.get("年初至今涨跌幅")),
-            "市场": "A股", "数据源": "AKShare",
-        }
-    except Exception as e:
-        return {"error": f"获取A股行情失败: {e}"}
+        if df is not None and not df.empty:
+            row = df[df["代码"] == code]
+            if not row.empty:
+                r = row.iloc[0]
+                return {
+                    "代码": code, "名称": r.get("名称", ""),
+                    "最新价": _safe_float(r.get("最新价")),
+                    "涨跌幅": _safe_float(r.get("涨跌幅")),
+                    "涨跌额": _safe_float(r.get("涨跌额")),
+                    "成交量(手)": _safe_float(r.get("成交量")),
+                    "成交额(元)": _safe_float(r.get("成交额")),
+                    "振幅": _safe_float(r.get("振幅")),
+                    "换手率": _safe_float(r.get("换手率")),
+                    "量比": _safe_float(r.get("量比")),
+                    "市盈率": _safe_float(r.get("市盈率-动态")),
+                    "市净率": _safe_float(r.get("市净率")),
+                    "总市值": _safe_float(r.get("总市值")),
+                    "流通市值": _safe_float(r.get("流通市值")),
+                    "今开": _safe_float(r.get("今开")),
+                    "昨收": _safe_float(r.get("昨收")),
+                    "最高": _safe_float(r.get("最高")),
+                    "最低": _safe_float(r.get("最低")),
+                    "60日涨跌幅": _safe_float(r.get("60日涨跌幅")),
+                    "年初至今涨跌幅": _safe_float(r.get("年初至今涨跌幅")),
+                    "市场": "A股", "数据源": "AKShare-东方财富",
+                }
+    except Exception:
+        pass
 
+    # 策略3：指数行情
+    try:
+        df_idx = ak.stock_zh_index_spot_em()
+        if df_idx is not None and not df_idx.empty:
+            row_idx = df_idx[df_idx["代码"] == code]
+            if not row_idx.empty:
+                r = row_idx.iloc[0]
+                return {
+                    "代码": code, "名称": r.get("名称", ""),
+                    "最新价": _safe_float(r.get("最新价")),
+                    "涨跌幅": _safe_float(r.get("涨跌幅")),
+                    "涨跌额": _safe_float(r.get("涨跌额")),
+                    "成交量(手)": _safe_float(r.get("成交量")),
+                    "成交额(元)": _safe_float(r.get("成交额")),
+                    "今开": _safe_float(r.get("今开")),
+                    "昨收": _safe_float(r.get("昨收")),
+                    "最高": _safe_float(r.get("最高")),
+                    "最低": _safe_float(r.get("最低")),
+                    "市场": "A股指数", "数据源": "AKShare",
+                }
+    except Exception:
+        pass
 
+    return {"error": f"未找到股票 {code}，请检查代码是否正确"}
 def get_realtime_quote_hk(code):
     """港股实时行情"""
     ak = _get_ak()
