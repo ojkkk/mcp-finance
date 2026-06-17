@@ -13,6 +13,31 @@ import pandas as pd
 _ak = None
 _ak_checked = False
 
+# ── 数据缓存 ────────────────────────────────────────────────────
+_spot_cache: dict[str, tuple[float, Any]] = {}  # {market: (timestamp, df)}
+
+def _cached_spot(market="a"):
+    """带缓存的实时行情获取，避免重复下载全市场数据"""
+    import time as _time
+    global _spot_cache
+    ttl = 5.0  # 5 秒缓存
+    now = _time.time()
+    if market in _spot_cache:
+        ts, df = _spot_cache[market]
+        if now - ts < ttl:
+            return df
+    ak = _get_ak()
+    if market == "a":
+        df = _cached_spot("a")
+    elif market == "hk":
+        df = _cached_spot("hk")
+    elif market == "us":
+        df = _cached_spot("us")
+    else:
+        return None
+    _spot_cache[market] = (now, df)
+    return df
+
 def _get_ak():
     global _ak, _ak_checked
     if _ak is not None: return _ak
@@ -57,7 +82,7 @@ def get_realtime_quote_a(code):
     """A股实时行情"""
     ak = _get_ak()
     try:
-        df = ak.stock_zh_a_spot_em()
+        df = _cached_spot("a")
         row = df[df["代码"] == code]
         if row.empty:
             try:
@@ -112,7 +137,7 @@ def get_realtime_quote_hk(code):
     """港股实时行情"""
     ak = _get_ak()
     try:
-        df = ak.stock_hk_spot_em()
+        df = _cached_spot("hk")
         row = df[df["代码"] == code]
         if row.empty:
             return {"error": f"未找到港股 {code}"}
@@ -140,7 +165,7 @@ def get_realtime_quote_us(code):
     """美股实时行情"""
     ak = _get_ak()
     try:
-        df = ak.stock_us_spot_em()
+        df = _cached_spot("us")
         row = df[df["代码"] == code]
         if row.empty:
             return {"error": f"未找到美股 {code}"}
@@ -482,7 +507,7 @@ def search_stocks(market, keyword, top_n=10):
     result = []
     if market == "a":
         try:
-            df = ak.stock_zh_a_spot_em()
+            df = _cached_spot("a")
             mask = df["代码"].str.contains(keyword, na=False) | df["名称"].str.contains(keyword, na=False)
             for _, row in df[mask].head(top_n).iterrows():
                 result.append({"代码": row.get("代码", ""), "名称": row.get("名称", ""),
@@ -492,7 +517,7 @@ def search_stocks(market, keyword, top_n=10):
             pass
     if market == "hk":
         try:
-            df = ak.stock_hk_spot_em()
+            df = _cached_spot("hk")
             mask = df["代码"].str.contains(keyword, na=False) | df["名称"].str.contains(keyword, na=False)
             for _, row in df[mask].head(top_n).iterrows():
                 result.append({"代码": row.get("代码", ""), "名称": row.get("名称", ""),
@@ -501,7 +526,7 @@ def search_stocks(market, keyword, top_n=10):
             pass
     if market == "us":
         try:
-            df = ak.stock_us_spot_em()
+            df = _cached_spot("us")
             mask = df["代码"].str.contains(keyword, na=False) | df["名称"].str.contains(keyword, na=False)
             for _, row in df[mask].head(top_n).iterrows():
                 result.append({"代码": row.get("代码", ""), "名称": row.get("名称", ""),
@@ -525,7 +550,7 @@ def get_batch_quotes_a(codes):
     """批量获取A股行情"""
     ak = _get_ak()
     try:
-        df = ak.stock_zh_a_spot_em()
+        df = _cached_spot("a")
         result = []
         for code in codes:
             row = df[df["代码"] == code]
@@ -631,7 +656,7 @@ def get_all_a_stocks_snapshot():
     """获取全市场A股快照"""
     ak = _get_ak()
     try:
-        df = ak.stock_zh_a_spot_em()
+        df = _cached_spot("a")
         if df is None or df.empty:
             return []
         return _df_to_records(df)
@@ -648,10 +673,10 @@ def test_data_sources():
     ak = _get_ak()
     results = {"测试时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "数据源": {}}
     tests = [
-        ("A股行情", lambda: ak.stock_zh_a_spot_em()),
+        ("A股行情", lambda: _cached_spot("a")),
         ("A股指数", lambda: ak.stock_zh_index_spot_em()),
-        ("港股", lambda: ak.stock_hk_spot_em()),
-        ("美股", lambda: ak.stock_us_spot_em()),
+        ("港股", lambda: _cached_spot("hk")),
+        ("美股", lambda: _cached_spot("us")),
         ("期货", lambda: ak.futures_zh_spot()),
         ("北向资金", lambda: ak.stock_hsgt_north_net_flow_in_em(symbol="北上")),
     ]
