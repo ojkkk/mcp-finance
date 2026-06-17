@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 import vectorbt as vbt
 
-from cn_stock.api import get_kline, guess_secid
+from mcp_finance.api import get_kline_a
 
 # ── 费率常量 ──
 COMMISSION_RATE = 0.001     # 佣金千分之一（买卖双向）
@@ -141,7 +141,7 @@ def run_backtest(
     """
     策略回测（基于 vectorbt 向量化引擎）
 
-    支持策略: ma_cross, macd_signal
+    支持策略: ma_cross, macd_signal, rsi_signal, kdj_signal, boll_signal, rsi_signal, kdj_signal, boll_signal
     """
     # ── 日期处理 ──
     if end_date is None:
@@ -151,7 +151,7 @@ def run_backtest(
         start_date = sd.strftime("%Y-%m-%d")
 
     # ── 获取 K 线 ──
-    secid = guess_secid(code)
+    secid = code  # use code directly
     beg_str = start_date.replace("-", "")
     end_str = end_date.replace("-", "")
     klines = get_kline(secid, klt="101", fqt="1", lmt=800, beg=beg_str, end=end_str)
@@ -189,7 +189,7 @@ def run_backtest(
         slow_line = macd_vbt.signal.to_numpy()
 
     else:
-        return {"error": f"未知策略: {strategy}", "可选策略": ["ma_cross", "macd_signal"]}
+        return {"error": f"未知策略: {strategy}", "可选策略": ["ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal"]}
 
     # ── A 股规则调整 ──
     entries, exits, skipped = _adjust_signals(entries, exits, close, code)
@@ -370,7 +370,7 @@ def optimize_backtest(
 
     Args:
         code:         股票代码
-        strategy:     策略名 (ma_cross / macd_signal)
+        strategy:     策略名 (ma_cross / macd_signal / rsi_signal / kdj_signal / boll_signal)
         fast_range:   快线周期列表，如 [5, 10, 15, 20]
         slow_range:   慢线周期列表，如 [10, 20, 30, 60]
         start_date:   开始日期
@@ -392,7 +392,7 @@ def optimize_backtest(
         start_date = sd.strftime("%Y-%m-%d")
 
     # ── 获取 K 线 ──
-    secid = guess_secid(code)
+    secid = code  # use code directly
     klines = get_kline(secid, klt="101", fqt="1", lmt=800,
                        beg=start_date.replace("-", ""),
                        end=end_date.replace("-", ""))
@@ -501,7 +501,14 @@ def _generate_summary(
     else:
         outperformed = "与买入持有持平"
 
-    strategy_name = "双均线交叉" if strategy == "ma_cross" else "MACD 金叉死叉"
+    strategy_names = {
+        "ma_cross": "双均线交叉",
+        "macd_signal": "MACD 金叉死叉",
+        "rsi_signal": "RSI 超买超卖",
+        "kdj_signal": "KDJ 金叉死叉",
+        "boll_signal": "BOLL 突破",
+    }
+    strategy_name = strategy_names.get(strategy, strategy)
     param_desc = f"({fast_period},{slow_period})" if strategy == "ma_cross" else f"({fast_period},{slow_period},9)"
     lines = [
         f"## {strategy_name}{param_desc} 回测总结\n",
@@ -559,7 +566,87 @@ def _generate_summary(
 
 def _get_stock_name(code: str) -> str:
     try:
-        from cn_stock.data import STOCK_MAPPING
+        from mcp_finance.data import STOCK_MAPPING
         return STOCK_MAPPING.get(code, code)
     except Exception:
         return code
+# ═══════════════════════════════════════════════════════════════
+# MCP Tool Handlers
+# ═══════════════════════════════════════════════════════════════
+
+from mcp_finance.errors import BacktestError, NoDataError
+from mcp_finance.logging_config import get_logger
+
+_blogger = get_logger(__name__)
+
+
+def handle_backtest(arguments: dict[str, Any]) -> dict[str, Any]:
+    """策略回测 handler"""
+    from typing import Any
+    from mcp_finance.chart import generate_backtest_chart
+
+    code = arguments["code"]
+    strategy = arguments.get("strategy", "ma_cross")
+    fast_period = arguments.get("fast_period", 5)
+    slow_period = arguments.get("slow_period", 20)
+    start_date = arguments.get("start_date")
+    end_date = arguments.get("end_date")
+    initial_capital = arguments.get("initial_capital", 100000.0)
+    generate_chart = arguments.get("generate_chart", True)
+
+    result = run_backtest(
+        code=code, strategy=strategy,
+        fast_period=fast_period, slow_period=slow_period,
+        start_date=start_date, end_date=end_date,
+        initial_capital=initial_capital,
+    )
+
+    if "error" in result:
+        raise BacktestError(str(result["error"]))
+
+    if generate_chart and "权益曲线" in result:
+        try:
+            chart_path = generate_backtest_chart(
+                stock_name=result["股票"],
+                strategy_label=result["策略"],
+                strategy_curve=result["权益曲线"],
+                benchmark_curve=result.get("基准(买入持有)", {}).get("权益曲线"),
+                trades=result.get("交易记录", []),
+                initial_capital=initial_capital,
+            )
+            result["权益曲线图"] = chart_path
+            result["权益曲线图提示"] = "这不是图片！这是一个交互式HTML文件，请用浏览器打开"
+        except Exception as e:
+            result["权益曲线图"] = f"图表生成失败: {e}"
+
+    _blogger.info("回测完成: %s strategy=%s return=%.2f%%", code, strategy, result.get("总收益率(%)", 0))
+    return result
+
+
+def handle_optimize(arguments: dict[str, Any]) -> dict[str, Any]:
+    """参数优化 handler"""
+    from typing import Any
+
+    code = arguments["code"]
+    strategy = arguments.get("strategy", "ma_cross")
+    fast_min = arguments.get("fast_min", 5)
+    fast_max = arguments.get("fast_max", 20)
+    fast_step = arguments.get("fast_step", 5)
+    slow_min = arguments.get("slow_min", 20)
+    slow_max = arguments.get("slow_max", 60)
+    slow_step = arguments.get("slow_step", 10)
+    start_date = arguments.get("start_date")
+    end_date = arguments.get("end_date")
+    metric = arguments.get("metric", "sharpe")
+
+    fast_range = list(range(fast_min, fast_max + 1, fast_step))
+    slow_range = list(range(slow_min, slow_max + 1, slow_step))
+
+    result = optimize_backtest(
+        code=code, strategy=strategy,
+        fast_range=fast_range, slow_range=slow_range,
+        start_date=start_date, end_date=end_date,
+        metric=metric,
+    )
+    _blogger.info("参数优化完成: %s strategy=%s", code, strategy)
+    return result

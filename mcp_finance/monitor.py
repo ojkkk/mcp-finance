@@ -231,3 +231,53 @@ def push_alerts(
         "results": results,
         "status": "已推送" if any(results.values()) else "推送失败（未配置 webhook）",
     }
+# ═══════════════════════════════════════════════════════════════
+# MCP Tool Handler
+# ═══════════════════════════════════════════════════════════════
+
+from mcp_finance.errors import NoDataError
+from mcp_finance.logging_config import get_logger
+
+_mlogger = get_logger(__name__)
+
+
+def handle_set_alert(arguments: dict[str, Any]) -> dict[str, Any]:
+    """设置告警条件并立即评估"""
+    from typing import Any
+    from mcp_finance.api import get_kline_a, get_realtime_quote_a
+    from mcp_finance.indicators import compute_all_indicators
+
+    code = arguments["code"]
+    pass  # secid removed
+
+    klines = get_kline_a(code, period="daily", adjust="qfq", limit=60)
+    indicators = compute_all_indicators(klines) if klines else {"snapshot": {}, "signals": []}
+    quotes = [get_realtime_quote_a(code)]
+    quote = quotes[0] if quotes else {}
+
+    rules: dict[str, Any] = {}
+    for key in ["price_above", "price_below", "gain_above", "gain_below",
+                 "rsi_above", "rsi_below"]:
+        if key in arguments and arguments[key] is not None:
+            rules[key] = arguments[key]
+    for key in ["macd_golden", "macd_death", "ma_golden", "ma_death"]:
+        if arguments.get(key):
+            rules[key] = True
+
+    if not rules:
+        raise NoDataError("请至少设置一个告警条件")
+
+    stock_name = quote.get("名称", code)
+    triggered = evaluate_alert_conditions(code, stock_name, indicators, quote, rules)
+    channel = arguments.get("push_channel", "dingtalk")
+    push_result = push_alerts(triggered, channels=[channel])
+
+    _mlogger.info("告警评估: %s rules=%d triggered=%d", code, len(rules), len(triggered))
+    return {
+        "股票": f"{stock_name}({code})",
+        "当前价": quote.get("最新价"),
+        "涨跌幅": quote.get("涨跌幅"),
+        "规则": rules,
+        "触发告警": triggered,
+        "推送结果": push_result,
+    }

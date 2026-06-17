@@ -6,7 +6,16 @@ Thumbs.db
 *.egg-info/
 dist/
 build/
-# 项目报告（不提交版本库）
-DEVELOPMENT_REPORT.md
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg
+
+
 # 生成的图表
 charts/
+
+# 环境
+.venv/
+venv/
+env/

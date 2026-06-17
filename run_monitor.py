@@ -20,9 +20,9 @@ import time
 from datetime import datetime
 from typing import Any
 
-from cn_stock.api import get_kline, get_realtime_quotations, guess_secid
-from cn_stock.indicators import compute_all_indicators
-from cn_stock.monitor import evaluate_alert_conditions, push_alerts
+from mcp_finance.api import get_kline_a, get_realtime_quote_a
+from mcp_finance.indicators import compute_all_indicators
+from mcp_finance.monitor import evaluate_alert_conditions, push_alerts
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -70,9 +70,9 @@ def _mark_triggered(code: str, rule: str) -> None:
 
 def check_one(code: str, rules: dict, channels: list[str]) -> list[dict[str, Any]]:
     try:
-        secid = guess_secid(code)
-        klines = get_kline(secid, klt="101", fqt="1", lmt=60)
-        quotes = get_realtime_quotations([secid])
+        pass  # using code directly
+        klines = get_kline_a(code, period="daily", adjust="qfq", limit=60)
+        quotes = [get_realtime_quote_a(code)]
         if not klines or not quotes:
             return []
         quote = quotes[0]
@@ -95,17 +95,12 @@ def check_one(code: str, rules: dict, channels: list[str]) -> list[dict[str, Any
 
 def main():
     print("=" * 50)
-    print("📈 mcp-stock-cn 持续盯盘已启动")
+    print("📈 mcp-finance 持续盯盘已启动")
     print(f"   监控 {len(WATCHLIST)} 只 | 间隔 {INTERVAL_SECONDS}s | 冷却 {COOLDOWN_MINUTES}min")
     print("   按 Ctrl+C 停止")
     print("=" * 50)
 
-    try:
-        import baostock as bs
-        bs.login()
-        print("✅ Baostock 已连接")
-    except ImportError:
-        print("⚠️ Baostock 未安装，使用东方财富/腾讯")
+    print("AKShare data source ready")
 
     try:
         while True:
@@ -125,12 +120,7 @@ def main():
             time.sleep(INTERVAL_SECONDS)
     except KeyboardInterrupt:
         print("\n🛑 已停止")
-    finally:
-        try:
-            import baostock as bs
-            bs.logout()
-        except ImportError:
-            pass
+
 
 
 if __name__ == "__main__":

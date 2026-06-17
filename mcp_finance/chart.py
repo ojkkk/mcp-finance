@@ -452,3 +452,59 @@ def generate_backtest_chart(
         f.write(html)
 
     return os.path.abspath(output_path)
+# ═══════════════════════════════════════════════════════════════
+# MCP Tool Handler
+# ═══════════════════════════════════════════════════════════════
+
+from mcp_finance.errors import NoDataError
+from mcp_finance.logging_config import get_logger
+
+_clogger = get_logger(__name__)
+
+
+def handle_plot_kline(arguments: dict[str, Any]) -> dict[str, Any]:
+    """生成交互式 K 线图 handler"""
+    from typing import Any
+    from mcp_finance.api import get_kline_a, get_realtime_quote_a
+    from mcp_finance.indicators import compute_all_indicators
+
+    code = arguments["code"]
+    pass  # secid removed
+    days = min(arguments.get("days", 120), 800)
+    ktype = arguments.get("ktype", "daily")
+    klt_map = {"daily": "101", "weekly": "102", "monthly": "103"}
+    klt = klt_map.get(ktype, "101")
+
+    klines = get_kline_a(code, period=ktype, adjust="qfq", limit=days)
+    if not klines:
+        raise NoDataError(f"无法获取 {code} 的 K 线数据")
+
+    quotes = [get_realtime_quote_a(code)]
+    stock_name = quotes[0]["名称"] if quotes else code
+    indicators = compute_all_indicators(klines)
+
+    show_macd = arguments.get("show_macd", True)
+    show_kdj = arguments.get("show_kdj", False)
+    show_rsi = arguments.get("show_rsi", False)
+
+    output_path = generate_kline_chart(
+        kline_data=klines,
+        stock_name=stock_name,
+        indicators=indicators,
+        show_volume=True,
+        show_macd=show_macd,
+        show_kdj=show_kdj,
+        show_rsi=show_rsi,
+    )
+
+    _clogger.info("K线图生成: %s days=%d path=%s", code, len(klines), output_path)
+    return {
+        "⚠️重要提示": "这不是图片！这是一个交互式HTML文件，请用浏览器打开下面的路径",
+        "股票": f"{stock_name}({code})",
+        "K线条数": len(klines),
+        "起止日期": f"{klines[0]['日期']} ~ {klines[-1]['日期']}",
+        "HTML文件路径": output_path,
+        "打开方式": "在文件管理器中找到该文件 → 双击用浏览器打开 → 可缩放/平移/悬停查看每根K线数值",
+        "最新收盘价": klines[-1]["收盘价"],
+        "技术信号": indicators.get("signals", []),
+    }

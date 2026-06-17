@@ -16,7 +16,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from cn_stock.api import _fetch_json
+from mcp_finance.api import get_all_a_stocks_snapshot
 
 
 # 东方财富 push2 接口字段对照
@@ -31,28 +31,34 @@ from cn_stock.api import _fetch_json
 
 
 def _fetch_all_a_stocks(page: int = 1, page_size: int = 100) -> list[dict[str, Any]]:
-    """获取一页 A 股行情数据"""
-    try:
-        data = _fetch_json(
-            "push2.eastmoney.com",
-            "/api/qt/clist/get",
-            {
-                "pn": str(page),
-                "pz": str(page_size),
-                "po": "0",
-                "np": "1",
-                "fltt": "2",
-                "invt": "2",
-                "fid": "f3",
-                "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",  # 沪深A股
-                "fields": "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f23,f37,f45,f62",
-            },
-        )
-        if data.get("rc") == 0 and data.get("data", {}).get("diff"):
-            return data["data"]["diff"]
-    except Exception:
-        pass
-    return []
+    """获取全市场 A 股行情数据（通过 AKShare）"""
+    data = get_all_a_stocks_snapshot()
+    if not data:
+        return []
+    # Convert to legacy format for backward compat
+    result = []
+    for item in data:
+        result.append({
+            "f12": item.get("代码", ""),
+            "f14": item.get("名称", ""),
+            "f2": item.get("最新价"),
+            "f3": item.get("涨跌幅"),
+            "f7": item.get("振幅"),
+            "f8": item.get("换手率"),
+            "f9": item.get("市盈率"),
+            "f10": item.get("量比"),
+            "f15": item.get("最高"),
+            "f16": item.get("最低"),
+            "f17": item.get("今开"),
+            "f18": item.get("昨收"),
+            "f20": item.get("总市值"),
+            "f21": item.get("流通市值"),
+            "f23": item.get("市净率"),
+            "f37": None,  # ROE from different source
+            "f45": None,  # dividend from different source
+            "f62": None,  # main_inflow from different source
+        })
+    return result
 
 
 def screen_stocks(
@@ -196,3 +202,35 @@ def screen_stocks(
         "total_scanned": len(all_stocks),
         "conditions": conditions,
     }
+# ═══════════════════════════════════════════════════════════════
+# MCP Tool Handler
+# ═══════════════════════════════════════════════════════════════
+
+from mcp_finance.errors import NoDataError
+from mcp_finance.logging_config import get_logger
+
+_slogger = get_logger(__name__)
+
+
+def handle_stock_screener(arguments: dict[str, Any]) -> dict[str, Any]:
+    """全市场股票筛选 handler"""
+    from typing import Any
+
+    result = screen_stocks(
+        min_gain=arguments.get("min_gain"),
+        max_gain=arguments.get("max_gain"),
+        min_volume_ratio=arguments.get("min_volume_ratio"),
+        min_turnover=arguments.get("min_turnover"),
+        max_pe=arguments.get("max_pe"),
+        min_market_cap=arguments.get("min_market_cap"),
+        min_pb=arguments.get("min_pb"),
+        max_pb=arguments.get("max_pb"),
+        min_roe=arguments.get("min_roe"),
+        min_main_inflow=arguments.get("min_main_inflow"),
+        min_dividend=arguments.get("min_dividend"),
+        top_n=arguments.get("top_n", 50),
+    )
+    if not result.get("matched"):
+        raise NoDataError("未找到符合条件的股票")
+    _slogger.info("选股完成: matched=%d scanned=%d", result["count"], result["total_scanned"])
+    return result

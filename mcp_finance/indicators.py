@@ -442,3 +442,50 @@ def _cross(
                     "index": i, "short": round(short[i], 4), "long": round(long[i], 4), "type": label,
                 })
     return crosses
+# ═══════════════════════════════════════════════════════════════
+# MCP Tool Handler
+# ═══════════════════════════════════════════════════════════════
+
+from mcp_finance.errors import NoDataError
+from mcp_finance.logging_config import get_logger
+
+_ilogger = get_logger(__name__)
+
+
+def handle_technical_indicators(arguments: dict[str, Any]) -> dict[str, Any]:
+    """计算技术指标 + 信号识别"""
+    from typing import Any
+    from mcp_finance.api import get_kline_a, get_realtime_quote_a
+
+    code = arguments["code"]
+    pass  # secid removed, using code directly
+    days = min(arguments.get("days", 120), 800)
+    ktype = arguments.get("ktype", "daily")
+    klt_map = {"daily": "101", "weekly": "102", "monthly": "103"}
+    klt = klt_map.get(ktype, "101")
+
+    klines = get_kline_a(code, period=ktype, adjust="qfq", limit=days)
+    if not klines:
+        raise NoDataError(f"无法获取 {code} 的 K 线数据")
+
+    dates = [k["日期"] for k in klines]
+    result = compute_all_indicators(klines, dates)
+
+    quote = [get_realtime_quote_a(code)]
+    if quote:
+        q = quote[0]
+        result["实时行情"] = {
+            "代码": q.get("代码", code),
+            "名称": q.get("名称", ""),
+            "最新价": q.get("最新价"),
+            "涨跌幅": q.get("涨跌幅"),
+            "今开": q.get("今开"),
+            "昨收": q.get("昨收"),
+            "最高": q.get("最高"),
+            "最低": q.get("最低"),
+            "成交量(手)": q.get("成交量(手)"),
+            "成交额(元)": q.get("成交额(元)"),
+        }
+
+    _ilogger.info("技术指标计算: %s days=%d", code, len(klines))
+    return result

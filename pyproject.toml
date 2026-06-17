@@ -1,14 +1,29 @@
 [project]
-name = "mcp-stock-cn"
-version = "0.2.0"
-description = "中国股市实时行情 MCP — A股/港股实时行情、K线、财报、板块排行、北向资金，基于东方财富 API，内建策略回测引擎"
-authors = [{name = "mcp-stock-cn"}]
+name = "mcp-finance"
+version = "0.4.0"
+description = "全市场金融数据 MCP Server — A股/港股/美股/期货/基金/债券/宏观 行情、K线、技术指标、选股、回测、告警，基于 AKShare 统一数据源"
+authors = [{name = "mcp-finance"}]
 license = {text = "MIT"}
+readme = "README.md"
 requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Framework :: MCP",
+]
+keywords = ["mcp", "stock", "finance", "a-share", "hk-stock", "us-stock", "futures", "fund", "bond", "macro", "china-stock", "trading", "backtest", "technical-analysis", "akshare"]
+
 dependencies = [
     "mcp>=1.4.1",
     "pydantic>=2.0",
-    "baostock>=0.8.8",
     "plotly>=5.0",
     "numpy>=1.23",
     "pandas>=2.0",
@@ -17,17 +32,37 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-backtest = ["numpy>=1.23"]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.14",
+    "ruff>=0.4",
+]
+all = [
+    "mcp-finance[dev]",
+]
 
 [project.urls]
-homepage = "https://github.com/ojkkk/mcp-stock-cn"
+homepage = "https://github.com/ojkkk/mcp-finance"
+repository = "https://github.com/ojkkk/mcp-finance"
+issues = "https://github.com/ojkkk/mcp-finance/issues"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["cn_stock"]
+packages = ["mcp_finance"]
 
 [project.scripts]
-mcp-stock-cn = "cn_stock.server:main"
+mcp-finance = "mcp_finance.server:main"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
