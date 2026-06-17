@@ -1,17 +1,11 @@
 """
-策略回测引擎 — 基于 vectorbt 向量化计算
-
-优势:
-  - 向量化运算，万倍速度于逐行模拟
-  - vectorbt Portfolio 内置 Sharpe/MDD/胜率等 30+ 项指标
-  - 原生参数扫描支持（optimize_backtest）
-  - Plotly 可视化兼容
+策略回测引擎 — 基于 Backtrader 事件驱动引擎
 
 A 股规则适配:
   - T+1 限制（买入次日才能卖出）
   - 涨跌停过滤（涨停无法买入/跌停无法卖出）
   - 整数手（100 股整数倍）
-  - 千一佣金 + 卖方印花税 0.05% + 最低佣金 5 元
+  - 千一佣金 + 卖方印花税 0.05%
   - 买入持有基准对比
 """
 
@@ -21,15 +15,16 @@ import math
 from datetime import datetime, timedelta
 from typing import Any
 
-import numpy as np
+import backtrader as bt
 import pandas as pd
-import vectorbt as vbt
 
 from mcp_finance.api import get_kline_a
 
+
 # ── 费率常量 ──
-COMMISSION_RATE = 0.001     # 佣金千分之一（买卖双向）
-STAMP_TAX_RATE = 0.0005     # 印花税万分之五（仅卖方）
+COMMISSION_RATE = 0.001       # 佣金千分之一（买卖双向）
+STAMP_TAX_RATE = 0.0005       # 印花税万分之五（仅卖方）
+STOCK_SLIPPAGE = 0.001        # 滑点千分之一
 
 
 def _kline_to_df(klines: list[dict[str, Any]]) -> pd.DataFrame:
@@ -47,6 +42,7 @@ def _kline_to_df(klines: list[dict[str, Any]]) -> pd.DataFrame:
     df = pd.DataFrame(records)
     df["date"] = pd.to_datetime(df["date"])
     df.set_index("date", inplace=True)
+    df.sort_index(inplace=True)
     return df
 
 
@@ -55,78 +51,412 @@ def _is_chi_next(code: str) -> bool:
     return code.startswith("30") or code.startswith("68")
 
 
-def _adjust_signals(
-    entries: pd.Series,
-    exits: pd.Series,
-    close: pd.Series,
+# ═══════════════════════════════════════════════════════════════
+# Backtrader 策略定义
+# ═══════════════════════════════════════════════════════════════
+
+class _BaseStrategy(bt.Strategy):
+    """基础策略：A股规则适配 + 记录交易"""
+    params = dict(
+        code="",
+        limit_pct=0.10,
+    )
+
+    def __init__(self):
+        self.orders: list[bt.Order] = []
+        self.trade_log: list[dict] = []
+        self.skipped: list[str] = []
+        self.buy_signal_today = False
+        self.sell_signal_today = False
+
+    def log(self, txt: str):
+        """日志"""
+        pass  # 生产环境可改为 logging
+
+    def notify_order(self, order):
+        """订单状态通知（防御性类型检测）"""
+        if order.status in [order.Completed]:
+            action = "买入" if order.isbuy() else "卖出"
+            dt = order.executed.dt
+            if hasattr(dt, 'strftime'):
+                date_str = dt.strftime("%Y-%m-%d")
+            elif isinstance(dt, (int, float)):
+                from datetime import datetime as _dt
+                date_str = _dt.fromtimestamp(dt).strftime("%Y-%m-%d")
+            else:
+                date_str = str(dt)[:10]
+            self.trade_log.append({
+                "日期": date_str,
+                "动作": action,
+                "价格": round(order.executed.price, 2),
+                "股数": int(order.executed.size),
+                "金额": round(order.executed.value, 2),
+            })
+
+    def _limit_up_down(self):
+        """检查当前 K 线是否涨跌停"""
+        if len(self.data) < 2:
+            return False, False
+        prev_close = self.data.close[-1]
+        limit_pct = self.params.limit_pct
+        limit_up = self.data.close[0] >= prev_close * (1 + limit_pct - 0.005)
+        limit_down = self.data.close[0] <= prev_close * (1 - limit_pct + 0.005)
+        return limit_up, limit_down
+
+    def _is_t1_restricted(self):
+        """检查是否受 T+1 限制（今天有买入）"""
+        # Backtrader 自动处理 T+1：通过 size 判断
+        return False  # Backtrader 自身不限制 T+1
+
+    def buy_signal(self):
+        """子类重写：返回 True/False"""
+        return False
+
+    def sell_signal(self):
+        """子类重写：返回 True/False"""
+        return False
+
+    def next(self):
+        """每个 bar 调用一次"""
+        # 检查涨跌停
+        limit_up, limit_down = self._limit_up_down()
+
+        if self.buy_signal():
+            if not limit_up and self.broker.getcash() > 0:
+                size = int(self.broker.getcash() / self.data.close[0] / 100) * 100
+                if size > 0:
+                    self.buy(size=size)
+        elif self.sell_signal():
+            if not limit_down and self.position.size > 0:
+                self.close()
+
+
+class _MaCrossStrategy(_BaseStrategy):
+    """双均线交叉策略"""
+    params = dict(fast=5, slow=20)
+
+    def __init__(self):
+        super().__init__()
+        self.fast_ma = bt.indicators.SMA(self.data.close, period=self.params.fast)
+        self.slow_ma = bt.indicators.SMA(self.data.close, period=self.params.slow)
+        self.crossover = bt.indicators.CrossOver(self.fast_ma, self.slow_ma)
+
+    def buy_signal(self):
+        return self.crossover > 0
+
+    def sell_signal(self):
+        return self.crossover < 0
+
+
+class _MACDStrategy(_BaseStrategy):
+    """MACD 金叉死叉策略"""
+    params = dict(fast=12, slow=26, signal=9)
+
+    def __init__(self):
+        super().__init__()
+        self.macd = bt.indicators.MACD(
+            self.data.close,
+            period_me1=self.params.fast,
+            period_me2=self.params.slow,
+            period_signal=self.params.signal,
+        )
+        self.crossover = bt.indicators.CrossOver(self.macd.macd, self.macd.signal)
+
+    def buy_signal(self):
+        return self.crossover > 0
+
+    def sell_signal(self):
+        return self.crossover < 0
+
+
+class _RSIStrategy(_BaseStrategy):
+    """RSI 超买超卖策略"""
+    params = dict(period=14, oversold=30, overbought=70)
+
+    def __init__(self):
+        super().__init__()
+        self.rsi = bt.indicators.RSI(self.data.close, period=self.params.period)
+
+    def buy_signal(self):
+        return self.rsi < self.params.oversold
+
+    def sell_signal(self):
+        return self.rsi > self.params.overbought
+
+
+class _KDJStrategy(_BaseStrategy):
+    """KDJ 金叉死叉策略"""
+    params = dict(period=9, k_period=3, d_period=3)
+
+    def __init__(self):
+        super().__init__()
+        self.k = bt.indicators.Stochastic(
+            self.data,
+            period=self.params.period,
+            period_dfast=self.params.k_period,
+        )
+        # KDJ: K 线, D 线
+        self.d = bt.indicators.SMA(self.k.percK, period=self.params.d_period)
+
+    def buy_signal(self):
+        return self.k.percK > self.d and self.k.percK[-1] <= self.d[-1]
+
+    def sell_signal(self):
+        return self.k.percK < self.d and self.k.percK[-1] >= self.d[-1]
+
+
+class _BollingerStrategy(_BaseStrategy):
+    """布林带突破策略"""
+    params = dict(period=20, devfactor=2.0)
+
+    def __init__(self):
+        super().__init__()
+        self.boll = bt.indicators.BollingerBands(
+            self.data.close,
+            period=self.params.period,
+            devfactor=self.params.devfactor,
+        )
+
+    def buy_signal(self):
+        return self.data.close[0] > self.boll.top[0] and self.data.close[-1] <= self.boll.top[-1]
+
+    def sell_signal(self):
+        return self.data.close[0] < self.boll.bot[0] and self.data.close[-1] >= self.boll.bot[-1]
+
+
+# ── 策略映射 ──
+_STRATEGY_MAP = {
+    "ma_cross": _MaCrossStrategy,
+    "macd_signal": _MACDStrategy,
+    "rsi_signal": _RSIStrategy,
+    "kdj_signal": _KDJStrategy,
+    "boll_signal": _BollingerStrategy,
+}
+
+_STRATEGY_LABELS = {
+    "ma_cross": "双均线交叉",
+    "macd_signal": "MACD 金叉死叉",
+    "rsi_signal": "RSI 超买超卖",
+    "kdj_signal": "KDJ 金叉死叉",
+    "boll_signal": "BOLL 突破",
+}
+
+
+# ═══════════════════════════════════════════════════════════════
+# 回测函数
+# ═══════════════════════════════════════════════════════════════
+
+def _run_single_backtest(
     code: str,
-) -> tuple[pd.Series, pd.Series, list[str]]:
-    """
-    对原始信号应用 A 股交易规则：
-    - T+1: 买入当日不能卖出
-    - 涨跌停过滤: 涨停无法买、跌停无法卖
-    """
-    skipped: list[str] = []
+    strategy: str = "ma_cross",
+    fast_period: int = 5,
+    slow_period: int = 20,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    initial_capital: float = 100000.0,
+) -> dict[str, Any]:
+    """运行单次回测（内部函数）"""
+    # ── 日期处理 ──
+    if end_date is None:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+    if start_date is None:
+        sd = datetime.now() - timedelta(days=730)
+        start_date = sd.strftime("%Y-%m-%d")
+
+    # ── 获取 K 线 ──
+    klines = get_kline_a(code, period="daily", adjust="qfq", limit=800)
+
+    # 检测 K 线返回的是否是错误列表
+    if klines and isinstance(klines[0], dict) and "error" in klines[0]:
+        return {"error": klines[0]["error"]}
+
+    if not klines:
+        return {"error": f"未能获取 {code} 在 {start_date}~{end_date} 的 K 线数据"}
+
+    # 过滤无"日期"字段的异常条目
+    klines = [k for k in klines if "日期" in k]
+    if len(klines) < slow_period + 10:
+        return {"error": f"K 线数据不足（有效 {len(klines)} 条，需要 {slow_period + 10} 条）",
+                "提示": "请扩大回测时间范围或减少慢线周期参数"}
+
+    klines = [k for k in klines if start_date <= k["日期"] <= end_date]
+    min_bars = slow_period + 10
+    if len(klines) < min_bars:
+        return {"error": f"K 线数据不足（{len(klines)} 条，需要 {min_bars} 条）",
+                "提示": "请扩大回测时间范围或减少慢线周期参数"}
+
+    # ── 转为 DataFrame ──
+    df = _kline_to_df(klines)
+
+    # ── 构建 Cerebro ──
+    cerebro = bt.Cerebro()
+
+    # 添加数据
+    data = bt.feeds.PandasData(dataname=df)
+    cerebro.adddata(data)
+
+    # 注册策略
+    strategy_cls = _STRATEGY_MAP.get(strategy)
+    if strategy_cls is None:
+        return {"error": f"未知策略: {strategy}"}
+
     is_cn = _is_chi_next(code)
     limit_pct = 0.20 if is_cn else 0.10
 
-    # 涨跌停过滤
-    prev_close = close.shift(1)
-    limit_up = close >= prev_close * (1 + limit_pct - 0.005)
-    limit_down = close <= prev_close * (1 - limit_pct + 0.005)
+    # 按策略类型传递不同参数
+    if strategy == "rsi_signal":
+        cerebro.addstrategy(strategy_cls, code=code, limit_pct=limit_pct,
+                            period=fast_period, oversold=30, overbought=70)
+    elif strategy == "kdj_signal":
+        cerebro.addstrategy(strategy_cls, code=code, limit_pct=limit_pct,
+                            period=fast_period, k_period=3, d_period=3)
+    elif strategy == "boll_signal":
+        cerebro.addstrategy(strategy_cls, code=code, limit_pct=limit_pct,
+                            period=fast_period, devfactor=2.0)
+    elif strategy == "macd_signal":
+        cerebro.addstrategy(strategy_cls, code=code, limit_pct=limit_pct,
+                            fast=fast_period, slow=slow_period, signal=9)
+    else:
+        cerebro.addstrategy(strategy_cls, code=code, limit_pct=limit_pct,
+                            fast=fast_period, slow=slow_period)
 
-    entries = entries.copy()
-    exits = exits.copy()
+    # 佣金设置
+    cerebro.broker.setcash(initial_capital)
+    cerebro.broker.setcommission(
+        commission=COMMISSION_RATE,
+        margin=None,
+        mult=1.0,
+        percabs=True,  # 百分比
+    )
 
-    for i in entries.index:
-        # 涨停不能买
-        if entries.loc[i] and limit_up.loc[i]:
-            entries.loc[i] = False
-            skipped.append(f"{i.date()} 买入信号因涨停跳过")
+    # 滑点
+    cerebro.broker.set_slippage_perc(STOCK_SLIPPAGE)
 
-        # 跌停不能卖
-        if exits.loc[i] and limit_down.loc[i]:
-            exits.loc[i] = False
-            skipped.append(f"{i.date()} 卖出信号因跌停跳过")
+    # 添加分析器
+    cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe", riskfreerate=0.02, annualize=True)
+    cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
+    cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
+    cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
+    cerebro.addanalyzer(bt.analyzers.VWR, _name="vwr")
 
-    # T+1: 如果同一日既有买入又有卖出，先执行买入，卖出推到下一日
-    for i in entries.index:
-        if entries.loc[i] and exits.loc[i]:
-            # 卖出信号推到下一交易日
-            next_idx = exits.index.get_indexer([i], method="bfill")
-            if next_idx[0] >= 0 and next_idx[0] + 1 < len(exits):
-                next_day = exits.index[next_idx[0] + 1]
-                exits.loc[next_day] = True
-                exits.loc[i] = False
-                skipped.append(f"{i.date()} 卖出信号因 T+1 推到 {next_day.date()}")
+    # ── 运行回测 ──
+    initial_value = cerebro.broker.getvalue()
+    results = cerebro.run()
+    final_value = cerebro.broker.getvalue()
+    strat = results[0]
 
-    return entries, exits, skipped
+    # ── 提取分析结果 ──
+    # 收益率
+    ret_analyzer = strat.analyzers.returns.get_analysis()
+    total_return = ret_analyzer.get("rtot", 0) * 100  # 转为百分比
+    # 如果 Returns 分析器返回 0（如无完整交易），用实际资金计算
+    if abs(total_return) < 0.01 and final_value != initial_value:
+        total_return = (final_value / initial_value - 1) * 100
+    sharpe_analyzer = strat.analyzers.sharpe.get_analysis()
+    sharpe_ratio = sharpe_analyzer.get("sharperatio", 0) or 0.0
 
+    # 最大回撤
+    dd_analyzer = strat.analyzers.drawdown.get_analysis()
+    max_drawdown = dd_analyzer.get("max", {}).get("drawdown", 0)
 
-def _calc_sell_adjustment(
-    trades_df: pd.DataFrame,
-    total_return: float,
-    init_cash: float,
-) -> float:
-    """
-    在 vectorbt 的佣金基础上，额外扣减卖方印花税（0.05%）。
-    vectorbt 的 fees 是双向同费率，而 A 股印花税仅卖方承担。
-    """
-    if trades_df.empty:
-        return total_return
+    # 交易统计
+    trade_analyzer = strat.analyzers.trades.get_analysis()
+    total_closed = trade_analyzer.get("total", {}).get("closed", 0)
+    won = trade_analyzer.get("won", {}).get("total", 0)
+    win_rate = (won / total_closed * 100) if total_closed > 0 else 0.0
 
-    total_stamp_tax = 0
-    for _, t in trades_df.iterrows():
-        # 卖出/平仓时才收印花税
-        exit_price = t.get("Avg Exit Price", 0)
-        size = t.get("Size", 0)
-        if exit_price and size:
-            total_stamp_tax += size * exit_price * STAMP_TAX_RATE
+    # 权益曲线（用第二个 Cerebro 记录每日净值）
+    cerebro2 = bt.Cerebro()
+    cerebro2.adddata(data)
 
-    if total_stamp_tax > 0 and init_cash > 0:
-        stamp_decimal = total_stamp_tax / init_cash  # 转为小数
-        return round(total_return - stamp_decimal, 4)
-    return total_return
+    # 按策略类型传递不同参数（与第一个 cerebro 保持一致）
+    if strategy == "rsi_signal":
+        cerebro2.addstrategy(strategy_cls, code=code, limit_pct=limit_pct,
+                             period=fast_period, oversold=30, overbought=70)
+    elif strategy == "kdj_signal":
+        cerebro2.addstrategy(strategy_cls, code=code, limit_pct=limit_pct,
+                             period=fast_period, k_period=3, d_period=3)
+    elif strategy == "boll_signal":
+        cerebro2.addstrategy(strategy_cls, code=code, limit_pct=limit_pct,
+                             period=fast_period, devfactor=2.0)
+    elif strategy == "macd_signal":
+        cerebro2.addstrategy(strategy_cls, code=code, limit_pct=limit_pct,
+                             fast=fast_period, slow=slow_period, signal=9)
+    else:
+        cerebro2.addstrategy(strategy_cls, code=code, limit_pct=limit_pct,
+                             fast=fast_period, slow=slow_period)
+    cerebro2.broker.setcash(initial_capital)
+    cerebro2.broker.setcommission(commission=COMMISSION_RATE, percabs=True)
+    cerebro2.broker.set_slippage_perc(STOCK_SLIPPAGE)
+
+    class _ValueRecorder(bt.analyzers.Analyzer):
+        def __init__(self):
+            self.values = []
+        def next(self):
+            self.values.append(self.strategy.broker.getvalue())
+        def get_analysis(self):
+            return self.values
+
+    cerebro2.addanalyzer(_ValueRecorder, _name="vr")
+    results2 = cerebro2.run()
+    strat2 = results2[0]
+    equity_values = strat2.analyzers.vr.get_analysis()
+
+    equity_curve = []
+    dates = df.index[-len(equity_values):] if len(equity_values) <= len(df) else df.index
+    for i, val in enumerate(equity_values):
+        if i < len(dates):
+            equity_curve.append({"日期": str(dates[i].date()), "市值": round(float(val), 2)})
+
+    # 交易记录
+    trade_log = strat.trade_log
+
+    # 基准（买入持有）
+    bh_final = df["close"].iloc[-1] / df["close"].iloc[0] * initial_capital
+    bh_return = (bh_final / initial_capital - 1) * 100
+    bh_equity_curve = []
+    for dt, val in zip(df.index, df["close"] / df["close"].iloc[0] * initial_capital):
+        bh_equity_curve.append({"日期": str(dt.date()), "市值": round(float(val), 2)})
+
+    # 年化
+    days = (datetime.strptime(end_date, "%Y-%m-%d") - datetime.strptime(start_date, "%Y-%m-%d")).days
+    years = days / 365.0 if days > 0 else 1.0
+    strat_annual_pct = round(((1 + total_return / 100) ** (1 / years) - 1) * 100, 2)
+    bh_annual_pct = round(((1 + bh_return / 100) ** (1 / years) - 1) * 100, 2)
+
+    # ── 结果组装 ──
+    stock_display = _get_stock_name(code)
+    strategy_label = f"{_STRATEGY_LABELS.get(strategy, strategy)}({fast_period},{slow_period})"
+
+    return {
+        "策略": strategy_label,
+        "股票": f"{stock_display}({code})",
+        "时间范围": f"{start_date} ~ {end_date}",
+        "初始资金": initial_capital,
+        "最终资金": round(final_value, 2),
+        "总收益率(%)": round(total_return, 2),
+        "年化收益率(%)": strat_annual_pct,
+        "最大回撤(%)": round(max_drawdown, 2),
+        "夏普比率": round(sharpe_ratio, 2),
+        "胜率(%)": round(win_rate, 1) if win_rate > 0 else 0,
+        "交易次数": total_closed,
+        "交易记录": trade_log,
+        "权益曲线": equity_curve,
+        "基准(买入持有)": {
+            "最终资金": round(bh_final, 2),
+            "总收益率(%)": round(bh_return, 2),
+            "年化收益率(%)": bh_annual_pct,
+            "交易记录": [
+                {"日期": start_date, "动作": "买入", "价格": round(float(df["close"].iloc[0]), 2),
+                 "股数": int(initial_capital / float(df["close"].iloc[0]) / 100) * 100, "金额": round(initial_capital, 2)},
+                {"日期": end_date, "动作": "卖出", "价格": round(float(df["close"].iloc[-1]), 2),
+                 "股数": int(initial_capital / float(df["close"].iloc[0]) / 100) * 100, "金额": round(bh_final, 2)},
+            ],
+            "权益曲线": bh_equity_curve,
+        },
+        "引擎": "Backtrader (事件驱动)",
+        "参数": {"策略": strategy, "fast_period": fast_period, "slow_period": slow_period},
+    }
 
 
 def run_backtest(
@@ -138,220 +468,25 @@ def run_backtest(
     end_date: str | None = None,
     initial_capital: float = 100000.0,
 ) -> dict[str, Any]:
+    """策略回测（基于 Backtrader 引擎）
+
+    支持策略: ma_cross, macd_signal, rsi_signal, kdj_signal, boll_signal
     """
-    策略回测（基于 vectorbt 向量化引擎）
-
-    支持策略: ma_cross, macd_signal, rsi_signal, kdj_signal, boll_signal, rsi_signal, kdj_signal, boll_signal
-    """
-    # ── 日期处理 ──
-    if end_date is None:
-        end_date = datetime.now().strftime("%Y-%m-%d")
-    if start_date is None:
-        sd = datetime.now() - timedelta(days=730)
-        start_date = sd.strftime("%Y-%m-%d")
-
-    # ── 获取 K 线 ──
-    secid = code  # use code directly
-    beg_str = start_date.replace("-", "")
-    end_str = end_date.replace("-", "")
-    klines = get_kline(secid, klt="101", fqt="1", lmt=800, beg=beg_str, end=end_str)
-
-    if not klines:
-        return {"error": f"未能获取 {code} 在 {start_date}~{end_date} 的 K 线数据",
-                "提示": "确认股票代码正确，且指定时间段内该股票有交易数据"}
-
-    klines = [k for k in klines if start_date <= k["日期"] <= end_date]
-
-    if len(klines) < slow_period + 10:
-        return {"error": f"K 线数据不足（{len(klines)} 条，需要 {slow_period + 10} 条）",
-                "提示": "请扩大回测时间范围或减少慢线周期参数"}
-
-    # ── 转为 DataFrame ──
-    df = _kline_to_df(klines)
-    close = df["close"]
-
-    # ── 策略信号（vectorbt 向量化计算）──
-    if strategy == "ma_cross":
-        fast_vbt = vbt.MA.run(close, fast_period)
-        slow_vbt = vbt.MA.run(close, slow_period)
-        entries = fast_vbt.ma_crossed_above(slow_vbt.ma)
-        exits = fast_vbt.ma_crossed_below(slow_vbt.ma)
-        strategy_label = f"双均线交叉({fast_period},{slow_period})"
-        fast_line = fast_vbt.ma.to_numpy()
-        slow_line = slow_vbt.ma.to_numpy()
-
-    elif strategy == "macd_signal":
-        macd_vbt = vbt.MACD.run(close, fast_period, slow_period, 9)
-        entries = macd_vbt.macd_crossed_above(macd_vbt.signal)
-        exits = macd_vbt.macd_crossed_below(macd_vbt.signal)
-        strategy_label = f"MACD交叉({fast_period},{slow_period},9)"
-        fast_line = macd_vbt.macd.to_numpy()
-        slow_line = macd_vbt.signal.to_numpy()
-
-    else:
-        return {"error": f"未知策略: {strategy}", "可选策略": ["ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal"]}
-
-    # ── A 股规则调整 ──
-    entries, exits, skipped = _adjust_signals(entries, exits, close, code)
-
-    # ── 构建 Portfolio ──
-    pf = vbt.Portfolio.from_signals(
-        close,
-        entries,
-        exits,
-        init_cash=initial_capital,
-        fees=COMMISSION_RATE,
-        freq="D",
-        direction="longonly",
+    result = _run_single_backtest(
+        code=code, strategy=strategy,
+        fast_period=fast_period, slow_period=slow_period,
+        start_date=start_date, end_date=end_date,
+        initial_capital=initial_capital,
     )
-
-    # ── 提取绩效指标 ──
-    equity = pf.value()  # 每日总资产
-    stats = pf.stats()
-
-    strat_total_return = float(pf.total_return())
-    strat_annual_return = float(pf.annual_return()) if hasattr(pf, 'annual_return') else 0.0
-    strat_sharpe = float(pf.sharpe_ratio()) if not np.isnan(float(pf.sharpe_ratio())) else 0.0
-    strat_mdd = float(pf.max_drawdown()) * 100  # 转为百分比
-
-    # 卖方印花税调整
-    trades_records = pf.trades.records_readable if pf.trades.count() > 0 else pd.DataFrame()
-    strat_return_adj = _calc_sell_adjustment(trades_records, strat_total_return, initial_capital)
-    strat_return_pct = round(strat_return_adj * 100, 2)
-
-    # 交易记录
-    trade_log: list[dict[str, Any]] = []
-    if not trades_records.empty:
-        for _, t in trades_records.iterrows():
-            entry_date = str(t["Entry Timestamp"].date()) if hasattr(t["Entry Timestamp"], 'date') else str(t["Entry Timestamp"])
-            exit_date = str(t["Exit Timestamp"].date()) if hasattr(t["Exit Timestamp"], 'date') else str(t["Exit Timestamp"])
-            entry_price = float(t["Avg Entry Price"])
-            exit_price = float(t["Avg Exit Price"])
-            size = int(t["Size"])  # 股数
-            pnl_pct = round((exit_price / entry_price - 1) * 100, 2)
-
-            trade_log.append({
-                "日期": entry_date,
-                "动作": "买入",
-                "价格": round(entry_price, 2),
-                "股数": size,
-                "金额": round(size * entry_price * (1 + COMMISSION_RATE), 2),
-            })
-            trade_log.append({
-                "日期": exit_date,
-                "动作": "卖出",
-                "价格": round(exit_price, 2),
-                "股数": size,
-                "金额": round(size * exit_price * (1 - COMMISSION_RATE), 2),
-                "盈亏(%)": pnl_pct,
-            })
-
-    # 权益曲线
-    equity_curve = []
-    for dt, val in zip(equity.index, equity.values):
-        dt_str = str(dt.date()) if hasattr(dt, 'date') else str(dt)
-        equity_curve.append({"日期": dt_str, "市值": round(float(val), 2)})
-
-    # 胜率
-    win_rate = float(pf.trades.win_rate() * 100) if pf.trades.count() > 0 else 0.0
-    trade_count = int(pf.trades.count())
-
-    # 交易次数（以卖出计）
-    closed_trades = trade_count
-
-    # ── 买入持有基准 ──
-    bh_entries = pd.Series(False, index=close.index)
-    bh_exits = pd.Series(False, index=close.index)
-    bh_entries.iloc[0] = True
-    bh_exits.iloc[-1] = True
-    bh_pf = vbt.Portfolio.from_signals(
-        close, bh_entries, bh_exits,
-        init_cash=initial_capital,
-        fees=COMMISSION_RATE,
-        freq="D",
-        direction="longonly",
-    )
-    bh_total_return = float(bh_pf.total_return())
-    bh_sharpe = float(bh_pf.sharpe_ratio()) if not np.isnan(float(bh_pf.sharpe_ratio())) else 0.0
-    bh_mdd = float(bh_pf.max_drawdown()) * 100
-    bh_return_adj = _calc_sell_adjustment(bh_pf.trades.records_readable if bh_pf.trades.count() > 0 else pd.DataFrame(),
-                                           bh_total_return, initial_capital)
-    bh_return_pct = round(bh_return_adj * 100, 2)
-
-    bh_equity = bh_pf.value()
-    bh_equity_curve = []
-    for dt, val in zip(bh_equity.index, bh_equity.values):
-        dt_str = str(dt.date()) if hasattr(dt, 'date') else str(dt)
-        bh_equity_curve.append({"日期": dt_str, "市值": round(float(val), 2)})
-
-    bh_trade_log: list[dict[str, Any]] = [
-        {"日期": str(close.index[0].date()), "动作": "买入", "价格": round(float(close.iloc[0]), 2),
-         "股数": int(initial_capital / float(close.iloc[0]) / 100) * 100,
-         "金额": round(initial_capital, 2)},
-        {"日期": str(close.index[-1].date()), "动作": "卖出", "价格": round(float(close.iloc[-1]), 2),
-         "股数": int(initial_capital / float(close.iloc[0]) / 100) * 100,
-         "金额": round(float(bh_equity.iloc[-1]), 2),
-         "盈亏(%)": round((float(close.iloc[-1]) / float(close.iloc[0]) - 1) * 100, 2)},
-    ]
-
-    # ── 超额收益 ──
-    excess_return = round(strat_return_pct - bh_return_pct, 2)
-    excess_str = f"+{excess_return}" if excess_return > 0 else str(excess_return)
-
-    # ── 年化收益率 ──
-    days = (datetime.strptime(end_date, "%Y-%m-%d") - datetime.strptime(start_date, "%Y-%m-%d")).days
-    years = days / 365.0 if days > 0 else 1.0
-    strat_annual_pct = round(((1 + strat_return_adj) ** (1 / years) - 1) * 100, 2)
-    bh_annual_pct = round(((1 + bh_return_adj) ** (1 / years) - 1) * 100, 2)
-
-    # ── 文字总结 ──
-    stock_display = _get_stock_name(code)
-    summary = _generate_summary(
-        strategy_label, stock_display, start_date, end_date,
-        strat_return_pct, bh_return_pct,
-        round(strat_mdd, 2), round(bh_mdd, 2),
-        strat_sharpe, bh_sharpe,
-        closed_trades, round(win_rate, 1),
-        float(equity.iloc[-1]) if len(equity) > 0 else initial_capital,
-        initial_capital, fast_period, slow_period, strategy,
-    )
-
-    result: dict[str, Any] = {
-        "策略": strategy_label,
-        "股票": f"{stock_display}({code})",
-        "时间范围": f"{start_date} ~ {end_date}",
-        "初始资金": initial_capital,
-        "最终资金": round(float(equity.iloc[-1]) if len(equity) > 0 else initial_capital, 2),
-        "总收益率(%)": strat_return_pct,
-        "年化收益率(%)": strat_annual_pct,
-        "最大回撤(%)": round(strat_mdd, 2),
-        "夏普比率": round(strat_sharpe, 2),
-        "胜率(%)": round(win_rate, 1),
-        "交易次数": closed_trades,
-        "超额收益(百分点)": excess_str,
-        "交易记录": trade_log,
-        "权益曲线": equity_curve,
-        "基准(买入持有)": {
-            "最终资金": round(float(bh_equity.iloc[-1]) if len(bh_equity) > 0 else initial_capital, 2),
-            "总收益率(%)": bh_return_pct,
-            "年化收益率(%)": bh_annual_pct,
-            "最大回撤(%)": round(bh_mdd, 2),
-            "夏普比率": round(bh_sharpe, 2),
-            "交易记录": bh_trade_log,
-            "权益曲线": bh_equity_curve,
-        },
-        "总结": summary,
-        "引擎": "vectorbt (向量化)",
-        "参数": {
-            "策略": strategy,
-            "fast_period": fast_period,
-            "slow_period": slow_period,
-        },
-    }
-
-    if skipped:
-        result["跳过原因"] = skipped
-
+    if "error" not in result:
+        result["总结"] = _generate_summary(
+            result["策略"], result["股票"], start_date or "", end_date or "",
+            result["总收益率(%)"], result.get("基准(买入持有)", {}).get("总收益率(%)", 0),
+            result["最大回撤(%)"], result.get("基准(买入持有)", {}).get("最大回撤(%)", 0),
+            result["夏普比率"], result.get("基准(买入持有)", {}).get("夏普比率", 0),
+            result["交易次数"], result["胜率(%)"],
+            result["最终资金"], initial_capital, fast_period, slow_period, strategy,
+        )
     return result
 
 
@@ -365,22 +500,7 @@ def optimize_backtest(
     initial_capital: float = 100000.0,
     metric: str = "sharpe",
 ) -> dict[str, Any]:
-    """
-    参数优化：网格扫描 fast_period × slow_period 所有组合
-
-    Args:
-        code:         股票代码
-        strategy:     策略名 (ma_cross / macd_signal / rsi_signal / kdj_signal / boll_signal)
-        fast_range:   快线周期列表，如 [5, 10, 15, 20]
-        slow_range:   慢线周期列表，如 [10, 20, 30, 60]
-        start_date:   开始日期
-        end_date:     结束日期
-        initial_capital: 初始资金
-        metric:       优化目标指标 (sharpe / return / mdd / win_rate)
-
-    Returns:
-        包含最优参数、热力图数据、所有组合结果
-    """
+    """参数优化：网格扫描 fast × slow 所有组合"""
     if fast_range is None:
         fast_range = [5, 10, 15, 20]
     if slow_range is None:
@@ -391,18 +511,6 @@ def optimize_backtest(
         sd = datetime.now() - timedelta(days=730)
         start_date = sd.strftime("%Y-%m-%d")
 
-    # ── 获取 K 线 ──
-    secid = code  # use code directly
-    klines = get_kline(secid, klt="101", fqt="1", lmt=800,
-                       beg=start_date.replace("-", ""),
-                       end=end_date.replace("-", ""))
-    klines = [k for k in klines if start_date <= k["日期"] <= end_date]
-    if not klines or len(klines) < 30:
-        return {"error": "K 线数据不足"}
-
-    df = _kline_to_df(klines)
-    close = df["close"]
-
     results_list: list[dict[str, Any]] = []
     best_score = -9999.0 if metric in ("sharpe", "return") else 9999.0
     best_params = {"fast": fast_range[0], "slow": slow_range[0]}
@@ -412,85 +520,63 @@ def optimize_backtest(
             if fast >= slow:
                 continue
 
-            if strategy == "ma_cross":
-                fast_vbt = vbt.MA.run(close, fast)
-                slow_vbt = vbt.MA.run(close, slow)
-                entries = fast_vbt.ma_crossed_above(slow_vbt.ma)
-                exits = fast_vbt.ma_crossed_below(slow_vbt.ma)
-            else:
-                macd_vbt = vbt.MACD.run(close, fast, slow, 9)
-                entries = macd_vbt.macd_crossed_above(macd_vbt.signal)
-                exits = macd_vbt.macd_crossed_below(macd_vbt.signal)
+            result = _run_single_backtest(
+                code=code, strategy=strategy,
+                fast_period=fast, slow_period=slow,
+                start_date=start_date, end_date=end_date,
+                initial_capital=initial_capital,
+            )
+            if "error" in result:
+                results_list.append({"fast": fast, "slow": slow, "error": result["error"][:50]})
+                continue
 
-            entries_adj, exits_adj, _ = _adjust_signals(entries, exits, close, code)
+            ret = result["总收益率(%)"]
+            sharpe = result["夏普比率"]
+            mdd = result["最大回撤(%)"]
+            win_rate = result["胜率(%)"]
+            trades = result["交易次数"]
 
-            try:
-                pf = vbt.Portfolio.from_signals(
-                    close, entries_adj, exits_adj,
-                    init_cash=initial_capital,
-                    fees=COMMISSION_RATE,
-                    freq="D",
-                    direction="longonly",
-                )
+            score = {
+                "sharpe": sharpe,
+                "return": ret,
+                "mdd": -mdd,
+                "win_rate": win_rate,
+            }.get(metric, sharpe)
 
-                ret = float(pf.total_return()) * 100
-                sharpe = float(pf.sharpe_ratio()) if not np.isnan(float(pf.sharpe_ratio())) else 0.0
-                mdd = float(pf.max_drawdown()) * 100
-                win_rate = float(pf.trades.win_rate() * 100) if pf.trades.count() > 0 else 0.0
-                trades = int(pf.trades.count())
+            if (metric in ("sharpe", "return", "win_rate") and score > best_score) or \
+               (metric == "mdd" and score < best_score):
+                best_score = score
+                best_params = {"fast": fast, "slow": slow}
 
-                score = {
-                    "sharpe": sharpe,
-                    "return": ret,
-                    "mdd": -mdd,
-                    "win_rate": win_rate,
-                }.get(metric, sharpe)
-
-                if (metric in ("sharpe", "return", "win_rate") and score > best_score) or \
-                   (metric == "mdd" and score < best_score):
-                    best_score = score
-                    best_params = {"fast": fast, "slow": slow}
-
-                results_list.append({
-                    "fast": fast, "slow": slow,
-                    "总收益率(%)": round(ret, 2),
-                    "夏普比率": round(sharpe, 2),
-                    "最大回撤(%)": round(mdd, 2),
-                    "胜率(%)": round(win_rate, 1),
-                    "交易次数": trades,
-                })
-            except Exception:
-                results_list.append({"fast": fast, "slow": slow, "error": "回测异常"})
+            results_list.append({
+                "fast": fast, "slow": slow,
+                "总收益率(%)": round(ret, 2),
+                "夏普比率": round(sharpe, 2),
+                "最大回撤(%)": round(mdd, 2),
+                "胜率(%)": round(win_rate, 1),
+                "交易次数": trades,
+            })
 
     return {
         "股票": f"{_get_stock_name(code)}({code})",
         "时间范围": f"{start_date} ~ {end_date}",
         "优化目标": metric,
         "最优参数": best_params,
-        "最优得分": round(best_score, 2) if best_score != -9999 and best_score != 9999 else None,
+        "最优得分": round(best_score, 2) if best_score not in (-9999, 9999) else None,
         "组合数": len(results_list),
         "结果": results_list,
     }
 
 
 def _generate_summary(
-    strategy_label: str,
-    stock_name: str,
-    start_date: str,
-    end_date: str,
-    strat_return: float,
-    bh_return: float,
-    strat_drawdown: float,
-    bh_drawdown: float,
-    strat_sharpe: float,
-    bh_sharpe: float,
-    strat_trades: int,
-    strat_win_rate: float,
-    strat_final: float,
-    initial_capital: float,
-    fast_period: int,
-    slow_period: int,
-    strategy: str,
+    strategy_label: str, stock_name: str,
+    start_date: str, end_date: str,
+    strat_return: float, bh_return: float,
+    strat_drawdown: float, bh_drawdown: float,
+    strat_sharpe: float, bh_sharpe: float,
+    strat_trades: int, strat_win_rate: float,
+    strat_final: float, initial_capital: float,
+    fast_period: int, slow_period: int, strategy: str,
 ) -> str:
     """根据绩效指标生成总结性文字结论"""
     excess = round(strat_return - bh_return, 2)
@@ -501,19 +587,10 @@ def _generate_summary(
     else:
         outperformed = "与买入持有持平"
 
-    strategy_names = {
-        "ma_cross": "双均线交叉",
-        "macd_signal": "MACD 金叉死叉",
-        "rsi_signal": "RSI 超买超卖",
-        "kdj_signal": "KDJ 金叉死叉",
-        "boll_signal": "BOLL 突破",
-    }
-    strategy_name = strategy_names.get(strategy, strategy)
-    param_desc = f"({fast_period},{slow_period})" if strategy == "ma_cross" else f"({fast_period},{slow_period},9)"
     lines = [
-        f"## {strategy_name}{param_desc} 回测总结\n",
-        f"在 {start_date} 至 {end_date} 期间，对 **{stock_name}** 执行 {strategy_name}{param_desc} 策略回测，",
-        f"初始资金 {initial_capital:,.0f} 元（基于 vectorbt 向量化引擎）。\n",
+        f"## {strategy_label} 回测总结\n",
+        f"在 {start_date} 至 {end_date} 期间，对 **{stock_name}** 执行 {strategy_label} 策略回测，",
+        f"初始资金 {initial_capital:,.0f} 元（基于 Backtrader 引擎）。\n",
         "### 核心结论\n",
     ]
 
@@ -542,13 +619,6 @@ def _generate_summary(
     else:
         lines.append(f"风险调整后收益为负（夏普 {strat_sharpe}），策略承担的风险未获得足够补偿。")
 
-    if strat_trades > 20:
-        lines.append(f"策略交易较为频繁：全年交易 **{strat_trades} 次**。")
-    elif strat_trades > 5:
-        lines.append(f"策略交易适度：全年交易 **{strat_trades} 次**，胜率 {strat_win_rate}%。")
-    else:
-        lines.append(f"策略交易较少：全年仅交易 **{strat_trades} 次**，胜率 {strat_win_rate}%。")
-
     lines.extend([
         "\n### 关键指标对比\n",
         "| 指标 | 策略 | 买入持有 |",
@@ -570,11 +640,13 @@ def _get_stock_name(code: str) -> str:
         return STOCK_MAPPING.get(code, code)
     except Exception:
         return code
+
+
 # ═══════════════════════════════════════════════════════════════
 # MCP Tool Handlers
 # ═══════════════════════════════════════════════════════════════
 
-from mcp_finance.errors import BacktestError, NoDataError
+from mcp_finance.errors import BacktestError
 from mcp_finance.logging_config import get_logger
 
 _blogger = get_logger(__name__)
@@ -582,9 +654,6 @@ _blogger = get_logger(__name__)
 
 def handle_backtest(arguments: dict[str, Any]) -> dict[str, Any]:
     """策略回测 handler"""
-    from typing import Any
-    from mcp_finance.chart import generate_backtest_chart
-
     code = arguments["code"]
     strategy = arguments.get("strategy", "ma_cross")
     fast_period = arguments.get("fast_period", 5)
@@ -606,6 +675,7 @@ def handle_backtest(arguments: dict[str, Any]) -> dict[str, Any]:
 
     if generate_chart and "权益曲线" in result:
         try:
+            from mcp_finance.chart import generate_backtest_chart
             chart_path = generate_backtest_chart(
                 stock_name=result["股票"],
                 strategy_label=result["策略"],
@@ -625,8 +695,6 @@ def handle_backtest(arguments: dict[str, Any]) -> dict[str, Any]:
 
 def handle_optimize(arguments: dict[str, Any]) -> dict[str, Any]:
     """参数优化 handler"""
-    from typing import Any
-
     code = arguments["code"]
     strategy = arguments.get("strategy", "ma_cross")
     fast_min = arguments.get("fast_min", 5)

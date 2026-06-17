@@ -15,6 +15,13 @@ import mcp.types as types
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 
+# 提前导入所有 handler，避免 handler 内延迟导入时 Python import 锁竞争导致死锁
+from mcp_finance.api import handle_realtime_quote, handle_kline, handle_financials, handle_market_indices, handle_sector_ranking, handle_north_flow, handle_batch_quotes, handle_dragon_tiger, handle_block_trades, handle_margin_trading, handle_futures_list, handle_test_data_sources
+from mcp_finance.indicators import handle_technical_indicators
+from mcp_finance.screener import handle_stock_screener
+from mcp_finance.backtest import handle_backtest, handle_optimize
+from mcp_finance.chart import handle_plot_kline
+from mcp_finance.pybroker_strategy import handle_pybroker_backtest
 from mcp_finance.data import HOT_STOCKS
 from mcp_finance.errors import StockError
 from mcp_finance.logging_config import get_logger, set_level
@@ -39,105 +46,79 @@ def _register(name: str):
 # -- A --
 @_register("get_realtime_quote")
 async def _get_realtime_quote(args: dict) -> dict:
-    from mcp_finance.api import handle_realtime_quote
     return handle_realtime_quote(args)
 
 @_register("get_kline")
 async def _get_kline(args: dict) -> list:
-    from mcp_finance.api import handle_kline
     return handle_kline(args)
 
 @_register("get_financials")
 async def _get_financials(args: dict) -> dict:
-    from mcp_finance.api import handle_financials
     return handle_financials(args)
 
 @_register("get_market_indices")
 async def _get_market_indices(args: dict) -> list:
-    from mcp_finance.api import handle_market_indices
     return handle_market_indices(args)
 
 @_register("get_sector_ranking")
 async def _get_sector_ranking(args: dict) -> list:
-    from mcp_finance.api import handle_sector_ranking
     return handle_sector_ranking(args)
 
 @_register("get_north_flow")
 async def _get_north_flow(args: dict) -> dict:
-    from mcp_finance.api import handle_north_flow
     return handle_north_flow(args)
 
-@_register("search_stock")
-async def _search_stock(args: dict) -> list:
-    from mcp_finance.api import handle_search_stock
-    return handle_search_stock(args)
 
 @_register("batch_quotes")
 async def _batch_quotes(args: dict) -> list:
-    from mcp_finance.api import handle_batch_quotes
     return handle_batch_quotes(args)
 
 # -- Tech --
 @_register("get_technical_indicators")
 async def _get_technical_indicators(args: dict) -> dict:
-    from mcp_finance.indicators import handle_technical_indicators
     return handle_technical_indicators(args)
 
 # -- Screener --
 @_register("stock_screener")
 async def _stock_screener(args: dict) -> dict:
-    from mcp_finance.screener import handle_stock_screener
     return handle_stock_screener(args)
 
 # -- Backtest --
 @_register("backtest_strategy")
 async def _backtest_strategy(args: dict) -> dict:
-    from mcp_finance.backtest import handle_backtest
     return handle_backtest(args)
 
 @_register("optimize_strategy")
 async def _optimize_strategy(args: dict) -> dict:
-    from mcp_finance.backtest import handle_optimize
     return handle_optimize(args)
 
-# -- Alert --
-@_register("set_alert")
-async def _set_alert(args: dict) -> dict:
-    from mcp_finance.monitor import handle_set_alert
-    return handle_set_alert(args)
 
 # -- Chart --
 @_register("plot_kline")
 async def _plot_kline(args: dict) -> dict:
-    from mcp_finance.chart import handle_plot_kline
     return handle_plot_kline(args)
 
 # -- Advanced Data --
 @_register("get_dragon_tiger")
 async def _get_dragon_tiger(args: dict) -> dict:
-    from mcp_finance.api import handle_dragon_tiger
     return handle_dragon_tiger(args)
 
 @_register("get_block_trades")
 async def _get_block_trades(args: dict) -> dict:
-    from mcp_finance.api import handle_block_trades
     return handle_block_trades(args)
 
 @_register("get_margin_trading")
 async def _get_margin_trading(args: dict) -> dict:
-    from mcp_finance.api import handle_margin_trading
     return handle_margin_trading(args)
 
 # -- Futures --
 @_register("get_futures_list")
 async def _get_futures_list(args: dict) -> list:
-    from mcp_finance.api import handle_futures_list
     return handle_futures_list(args)
 
 # -- Diagnostics --
 @_register("test_data_sources")
 async def _test_data_sources(_args: dict) -> dict:
-    from mcp_finance.api import handle_test_data_sources
     return handle_test_data_sources()
 
 
@@ -162,14 +143,12 @@ async def read_resource(uri: str) -> str:
         return json.dumps(HOT_STOCKS, ensure_ascii=False, indent=2)
 
     if uri == "stock://market/indices":
-        from mcp_finance.api import handle_market_indices
         indices = handle_market_indices({"market": "a"})
         return json.dumps(indices, ensure_ascii=False, indent=2)
 
     m = re.match(r"stock://(\w+)/realtime", uri)
     if m:
         code = m.group(1)
-        from mcp_finance.api import handle_realtime_quote
         try:
             result = handle_realtime_quote({"code": code})
             return json.dumps(result, ensure_ascii=False, indent=2)
@@ -179,7 +158,6 @@ async def read_resource(uri: str) -> str:
     m = re.match(r"stock://(\w+)/kline", uri)
     if m:
         code = m.group(1)
-        from mcp_finance.api import handle_kline
         try:
             klines = handle_kline({"code": code, "ktype": "daily", "limit": 30})
             return json.dumps(klines, ensure_ascii=False, indent=2)
@@ -189,7 +167,6 @@ async def read_resource(uri: str) -> str:
     m = re.match(r"stock://(\w+)/indicators", uri)
     if m:
         code = m.group(1)
-        from mcp_finance.indicators import handle_technical_indicators
         try:
             result = handle_technical_indicators({"code": code, "days": 120})
             return json.dumps(result, ensure_ascii=False, indent=2)
@@ -274,19 +251,6 @@ async def list_tools() -> list[types.Tool]:
                 "properties": {
                     "days": {"type": "integer", "description": "最近几天"},
                 },
-            },
-        ),
-        types.Tool(
-            name="search_stock",
-            description="按关键词搜索股票（代码或名称），支持跨市场。market: a/hk/us",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "keyword": {"type": "string", "description": "搜索关键词，如 '茅台'、'6005'、'AAPL'"},
-                    "market": {"type": "string", "description": "市场: a/hk/us，默认 a"},
-                    "top_n": {"type": "integer", "description": "返回条数"},
-                },
-                "required": ["keyword"],
             },
         ),
         types.Tool(
@@ -380,28 +344,6 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
-            name="set_alert",
-            description="设置股票预警条件，支持：价格突破/跌破、涨跌幅阈值、MACD金叉死叉、均线金叉死叉、RSI超买超卖。触发后可通过钉钉/企业微信/Server酱推送",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "code": {"type": "string", "description": "股票代码，如 '600519'"},
-                    "price_above": {"type": "number", "description": "股价突破此价格则告警"},
-                    "price_below": {"type": "number", "description": "股价跌破此价格则告警"},
-                    "gain_above": {"type": "number", "description": "涨幅超过此 % 则告警"},
-                    "gain_below": {"type": "number", "description": "跌幅超过此 % 则告警"},
-                    "macd_golden": {"type": "boolean", "description": "MACD 金叉告警"},
-                    "macd_death": {"type": "boolean", "description": "MACD 死叉告警"},
-                    "ma_golden": {"type": "boolean", "description": "均线金叉 (MA5上穿MA20) 告警"},
-                    "ma_death": {"type": "boolean", "description": "均线死叉 (MA5下穿MA20) 告警"},
-                    "rsi_above": {"type": "number", "description": "RSI(14) 超过此值告警，如 80"},
-                    "rsi_below": {"type": "number", "description": "RSI(14) 低于此值告警，如 20"},
-                    "push_channel": {"type": "string", "description": "推送渠道: dingtalk / wecom / serverchan"},
-                },
-                "required": ["code"],
-            },
-        ),
-        types.Tool(
             name="plot_kline",
             description="生成交互式 K 线 HTML 文件（不是PNG图片！），含蜡烛图+均线+成交量+MACD/KDJ/RSI副图。返回文件路径，请务必用浏览器打开该 HTML 文件查看（支持缩放/平移/悬停查看数值）",
             inputSchema={
@@ -468,19 +410,17 @@ try:
         KlineParams, FinancialsParams, SectorRankingParams,
         NorthFlowParams, SearchParams, TechnicalIndicatorsParams,
         ScreenerParams, BacktestParams, OptimizeParams,
-        AlertParams, PlotKlineParams, validate_and_coerce,
+        PlotKlineParams, validate_and_coerce,
     )
     _TOOL_VALIDATORS.update({
         "get_kline": KlineParams,
         "get_financials": FinancialsParams,
         "get_sector_ranking": SectorRankingParams,
         "get_north_flow": NorthFlowParams,
-        "search_stock": SearchParams,
         "get_technical_indicators": TechnicalIndicatorsParams,
         "stock_screener": ScreenerParams,
         "backtest_strategy": BacktestParams,
         "optimize_strategy": OptimizeParams,
-        "set_alert": AlertParams,
         "plot_kline": PlotKlineParams,
     })
     _HAS_VALIDATORS = True

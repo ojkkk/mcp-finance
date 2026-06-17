@@ -4,16 +4,13 @@
 筛选维度:
   - 涨跌幅 / 振幅 / 换手率
   - 成交量变化（量比）
-  - 市盈率 / 市净率 / ROE
-  - 总市值 / 主力净流入 / 股息率
+  - 市盈率 / 市净率
+  - 总市值 / 流通市值
 
 数据来源: 东方财富全市场行情接口 (push2.eastmoney.com)
-
-版本: 0.2.0 — 新增 8 个筛选维度
 """
 
 from __future__ import annotations
-import time
 from typing import Any
 
 from mcp_finance.api import get_all_a_stocks_snapshot
@@ -26,12 +23,15 @@ from mcp_finance.api import get_all_a_stocks_snapshot
 # f10=量比  f12=代码  f14=名称
 # f15=最高  f16=最低  f17=今开  f18=昨收
 # f20=总市值(元)  f21=流通市值(元)
-# f23=市净率(PB)  f37=ROE(%)  f45=股息率(%)
-# f62=主力净流入(万元)
+# f23=市净率(PB)
+# ※ 注意: ROE(f37)/股息率(f45)/主力净流入(f62) 来自不同数据源，当前暂未接入
 
 
 def _fetch_all_a_stocks(page: int = 1, page_size: int = 100) -> list[dict[str, Any]]:
-    """获取全市场 A 股行情数据（通过 AKShare）"""
+    """获取全市场 A 股行情数据（通过 AKShare）
+
+    注: page/page_size 参数保留仅用于兼容，实际总会返回全量数据。
+    """
     data = get_all_a_stocks_snapshot()
     if not data:
         return []
@@ -96,16 +96,7 @@ def screen_stocks(
     Returns:
         {"matched": [...], "total_scanned": int, "conditions": {...}}
     """
-    all_stocks = _fetch_all_a_stocks(page_size=100)
-    if not all_stocks:
-        # 多页获取
-        all_stocks = []
-        for p in range(1, 5):
-            page = _fetch_all_a_stocks(page=p, page_size=100)
-            if not page:
-                break
-            all_stocks.extend(page)
-            time.sleep(0.5)
+    all_stocks = _fetch_all_a_stocks()
 
     matched: list[dict[str, Any]] = []
     conditions = {
@@ -142,7 +133,6 @@ def screen_stocks(
         turnover = _f(item.get("f8"))
         pe = _f(item.get("f9"))
         market_cap = _f(item.get("f20"))
-        # 新增字段
         pb = _f(item.get("f23"))
         roe = _f(item.get("f37"))
         dividend = _f(item.get("f45"))
@@ -167,12 +157,14 @@ def screen_stocks(
             continue
         if max_pb is not None and (pb is not None and pb > max_pb):
             continue
+        # ROE/股息率/主力净流入 — 数据暂未提供时排除（设了条件但值为None则排除）
         if min_roe is not None and (roe is None or roe < min_roe):
             continue
         if min_main_inflow is not None and (main_inflow is None or main_inflow < min_main_inflow):
             continue
         if min_dividend is not None and (dividend is None or dividend < min_dividend):
             continue
+
 
         matched.append({
             "代码": code,

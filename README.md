@@ -12,10 +12,9 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/MCP-1.4+-purple?logo=modelcontextprotocol" alt="MCP 1.4+">
-  <img src="https://img.shields.io/badge/version-0.4.0-orange" alt="Version 0.4.0">
+  <img src="https://img.shields.io/badge/version-0.6.0-orange" alt="Version 0.6.0">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
-  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome">
-  <img src="https://img.shields.io/badge/data-AKShare-red" alt="AKShare Data">
+  <img src="https://img.shields.io/badge/data-easy--tdx%20%2B%20AKShare-blue" alt="Dual Data Source">
 </p>
 
 ---
@@ -27,12 +26,12 @@
 mcp-finance 给了 AI 一个**实时、结构化、可计算**的全市场数据源：
 
 - **全市场覆盖** — A股 + 港股 + 美股 + 国内期货，一个 MCP Server 搞定
-- **实时行情** — 基于 AKShare 统一数据源，稳定可靠
+- **双数据源** — easy-tdx 通达信 TCP 协议（毫秒级）+ AKShare（财务/板块等补充），稳定可靠
 - **技术分析** — 9 大指标本地计算，金叉死叉自动识别
 - **条件选股** — 全市场 A 股按 11 个维度筛选（涨跌幅/量比/换手率/PE/PB/ROE/主力净流入等）
-- **策略回测** — 基于 vectorbt 向量化引擎，含双均线/MACD/RSI/KDJ/BOLL 策略回测 + 参数优化
+- **策略回测** — 基于 Backtrader 事件驱动引擎，含双均线/MACD/RSI/KDJ/BOLL 策略回测 + 参数优化
 - **参数优化** — 网格扫描参数组合，自动找最优参数（夏普/收益率/回撤/胜率多种目标）
-- **盯盘告警** — 价格突破/金叉死叉/超买超卖  钉钉/微信推送
+- **盯盘告警** — 价格突破/金叉死叉/超买超卖 钉钉/企业微信/Server酱推送
 - **K线图表** — Plotly 交互式 HTML，蜡烛图+均线+MACD/KDJ/RSI
 - **高级数据** — 龙虎榜/大宗交易/两融数据全覆盖
 
@@ -42,6 +41,7 @@ mcp-finance 给了 AI 一个**实时、结构化、可计算**的全市场数据
 
 - **Python** 3.10 或更高版本
 - 建议使用虚拟环境（venv / conda）安装
+- easy-tdx 需要能访问通达信行情服务器（默认端口 7709/7727）
 
 ---
 
@@ -61,9 +61,9 @@ python -m venv .venv
 pip install -e .
 ```
 
-**核心依赖**：`mcp` / `pydantic` / `akshare` / `plotly` / `numpy` / `pandas` / `vectorbt`
+**核心依赖**：`mcp` / `pydantic` / `easy-tdx` / `akshare` / `plotly` / `numpy` / `pandas` / `backtrader`
 
->  AKShare 统一管理所有数据源，无需额外配置
+> easy-tdx 通过通达信 TCP 协议获取毫秒级实时行情；AKShare 作为财务/板块数据补充。
 
 ### 配置
 
@@ -145,9 +145,9 @@ MA(5/10/20/60/120/250)、MACD(DIF/DEA/柱)、KDJ(K/D/J)、RSI(6/14/24)、
 BOLL(上/中/下轨)、WR(威廉)、BIAS(乖离率)
 
 **自动识别的信号**：
-均线金叉/死叉 &nbsp;  MACD金叉/死叉 &nbsp;  MACD柱转正/转负
- KDJ超买/超卖 &nbsp;  RSI严重超买(>80)/超卖(<20)
- RSI偏高(>70)/偏低(<30) &nbsp;  均线多头/空头排列
+均线金叉/死叉 MACD金叉/死叉 MACD柱转正/转负
+KDJ超买/超卖 RSI严重超买(>80)/超卖(<20)
+RSI偏高(>70)/偏低(<30) 均线多头/空头排列
 
 ### 条件选股
 
@@ -166,13 +166,12 @@ BOLL(上/中/下轨)、WR(威廉)、BIAS(乖离率)
 
 **支持策略**：ma_cross(双均线交叉)、macd_signal(MACD金叉死叉)、rsi_signal(RSI超买超卖)、kdj_signal(KDJ金叉死叉)、boll_signal(BOLL突破)
 
-A 股规则适配：T+1 / 涨跌停过滤 / 千一佣金 / 卖方印花税 / 整数手
+**回测引擎**：Backtrader 事件驱动引擎，A 股规则适配：T+1 / 涨跌停过滤 / 千一佣金 / 卖方印花税 / 整数手
 
 ### 盯盘告警
 
 | 工具 | 说明 | 必填参数 |
 |------|------|----------|
-| `set_alert` | 设置条件告警+立即评估 | `code` |
 
 **告警条件**：价格突破/跌破、涨跌幅阈值、MACD金叉死叉、均线金叉死叉、RSI超买超卖
 **推送渠道**：钉钉机器人 / 企业微信 / Server酱(微信)
@@ -197,7 +196,7 @@ A 股规则适配：T+1 / 涨跌停过滤 / 千一佣金 / 卖方印花税 / 整
 
 | 工具 | 说明 |
 |------|------|
-| `test_data_sources` | 诊断全市场数据源(A股/港股/美股/期货/北向资金)可用性 |
+| `test_data_sources` | 诊断全市场数据源(A股/港股/美股/期货)可用性 |
 
 ---
 
@@ -207,7 +206,7 @@ A 股规则适配：T+1 / 涨跌停过滤 / 千一佣金 / 卖方印花税 / 整
 |------|----------|
 | A股行情 | "查一下茅台(600519)的最新价和涨跌幅" |
 | 港股行情 | "腾讯(00700)港股现在多少钱？" |
-| 美股行情 | "AAPL 苹果股价多少？" |
+| 美股行情 | "AAPL 苹果股价多少？英伟达 NVDA 什么价？" |
 | 期货行情 | "看看螺纹钢期货行情" |
 | 技术分析 | "帮我分析比亚迪的技术指标，有没有金叉？RSI 超卖没有？" |
 | 财务分析 | "恒瑞医药最近几期营收和 ROE 趋势" |
@@ -227,10 +226,11 @@ A 股规则适配：T+1 / 涨跌停过滤 / 千一佣金 / 卖方印花税 / 整
 
 | 源 | 说明 | 覆盖范围 |
 |----|------|----------|
-| **AKShare** | 开源金融数据接口，统一管理全部数据源 | A股/港股/美股/期货/指数/板块/资金流向/龙虎榜/两融 |
+| **easy-tdx** | 通达信 TCP 协议，毫秒级实时行情，无需 API Key | A股/港股/美股/期货 K线+实时报价+板块+资金流向 |
+| **AKShare** | 开源金融数据接口，新浪/同花顺源 | 财务数据/龙虎榜/大宗交易/两融/北向资金 |
 
->  单一数据源、统一接口、零配置，pip install 即用。
-> AKShare (https://akshare.akfamily.xyz/) 是开源金融数据 Python 库，内部整合了东方财富、新浪、腾讯等多个数据源。
+> easy-tdx 直连通达信行情服务器（端口 7709），毫秒级响应，无速率限制。
+> AKShare 仅作为 easy-tdx 未覆盖的财务/高级数据补充，使用新浪/同花顺源（东方财富源在部分网络环境下不可达）。
 
 ---
 
@@ -241,22 +241,21 @@ mcp-finance/
   pyproject.toml
   README.md              # 中文文档
   README.en.md           # English documentation
-  run_monitor.py         # 独立盯盘进程
   mcp_finance/
     __init__.py
-    api.py               # AKShare 统一数据封装层（全市场）
-    data.py              # 200+ 股票映射 & 行业分类
+    api.py               # easy-tdx + AKShare 双数据源封装层
+    data.py              # 230+ 股票映射 (A股/港股/美股) & 行业分类
     indicators.py        # 9 大技术指标 + 信号识别（纯Python）
     screener.py          # 全市场条件筛选（11 维度）
-    backtest.py          # vectorbt 向量化回测引擎 + 参数优化
+    backtest.py          # Backtrader 事件驱动回测引擎 + 参数优化
     akshare_data.py      # 向后兼容 re-export 层
-    monitor.py           # 告警监控 + 钉钉/微信推送
     chart.py             # Plotly 交互式 K 线图
     server.py            # MCP Server（20+ tools + resources）
     errors.py            # 统一错误类型
     logging_config.py    # 结构化日志
     validators.py        # Pydantic 参数校验
     cache.py             # TTL 缓存
+    pybroker_strategy.py # PyBroker ML 策略模块（实验性）
   tests/
     test_indicators.py   # 技术指标单元测试
     test_screener.py     # 选股器单元测试
@@ -266,45 +265,25 @@ mcp-finance/
 
 ## 已知限制 & 路线图
 
-### 当前不足
--  **分时数据缺失**：暂不支持盘内分时（Tick 级）数据
--  **美股/港股数据丰富度**：目前覆盖基础行情和K线，财务/板块等高级功能待扩展
--  **期货分钟K线**：仅支持日线级别
+### v0.6.0 更新
+- [x] **easy-tdx 主数据源** — 毫秒级通达信 TCP 实时行情，默认优先
+- [x] **涨跌幅/涨跌额自动计算** — AKShare 回退时从 close/pre_close 推算
+- [x] **import 死锁修复** — handler 内延迟导入改为模块级预导入，消除 120s 超时
+- [x] **进程泄漏修复** — 旧版 MCP server 进程不再无限累积
+- [x] **try/except/finally 结构修复** — 4 处异常处理错误 + 线程池泄漏
+- [x] **PyBroker ML 策略模块** — Walkforward Analysis + 技术特征工程
+- [x] **Backtrader 回测引擎** — 事件驱动，5 种策略，A 股规则适配
 
-### 计划中
-
->  完整的发展方向详细报告请见 [DEVELOPMENT_REPORT.md](./DEVELOPMENT_REPORT.md)
-
-** P0 — 高优先级（短期可落地）**
-- [x] **策略回测 MCP Tool** — 基于 vectorbt 向量化引擎，含参数优化 + A 股规则适配
-- [x] **选股器大升级** — 从 5 维扩展到 11 维（新增 PB/ROE/主力净流入/股息率/振幅）
-- [x] **全市场覆盖** — A股 + 港股 + 美股 + 期货，单一数据源 AKShare
-- [x] **统一数据源** — 移除多数据源架构，AKShare 统一后端
-- [x] **单元测试覆盖** — indicators + screener 核心模块
-
-** P1 — 中优先级（中期差异化）**
-- [ ] 港股/美股财务数据与高级分析
-- [ ] 个股资金流向（主力/散户净流入）
-- [ ] Web Dashboard（FastAPI + 轻量前端看板）
-- [ ] 多 Agent 协作分析（多维度结构化研报）
-
-** P2 — 长期探索**
-- [ ] 形态识别增强（威科夫/头肩顶/杯柄等）
-- [ ] 分时图 / Tick 级数据
-- [ ] 数字货币行情支持
-- [ ] Docker 一键部署 + PyPI 发布
-- [ ] MCP Resources 扩展（新闻舆情、研报摘要）
-
-> 欢迎提 PR 或 Issue 贡献新功能！
 
 ---
 
 ## 致谢
 
-- [**AKShare**](https://akshare.akfamily.xyz/) — 开源金融数据接口库，一站式提供多市场数据
-- [**Plotly**](https://plotly.com/python/) — 提供强大的交互式图表能力
-- [**MCP (Model Context Protocol)**](https://modelcontextprotocol.io/) — AI 工具调用标准协议
-- [**vectorbt**](https://vectorbt.dev/) — 向量化回测引擎
+- [**easy-tdx**](https://github.com/handsomejustin/easy-tdx) — 开源通达信 TCP 协议行情客户端，毫秒级全市场数据
+- [**AKShare**](https://akshare.akfamily.xyz/) — 开源金融数据接口库
+- [**Backtrader**](https://www.backtrader.com/) — 事件驱动回测框架
+- [**Plotly**](https://plotly.com/python/) — 交互式图表
+- [**MCP**](https://modelcontextprotocol.io/) — AI 工具调用标准协议
 
 ---
 
@@ -320,5 +299,5 @@ mcp-finance/
 </p>
 
 <p align="center">
-  <a href="README.en.md"> Read this in English</a>
+  <a href="README.en.md">Read this in English</a>
 </p>

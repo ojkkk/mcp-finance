@@ -62,7 +62,7 @@ def cached(ttl: float = 60.0, key_fn: Callable[..., str] | None = None):
             if key_fn is not None:
                 cache_key = key_fn(*args, **kwargs)
             else:
-                cache_key = f"{func.__module__}.{func.__qualname__}:{args}:{sorted(kwargs.items())}"
+                cache_key = f"{func.__module__}.{func.__qualname__}:{args}:{sorted(kwargs.items(), key=lambda x: str(x[0]))}"
 
             result = cache.get(cache_key)
             if result is not None:

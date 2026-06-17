@@ -455,14 +455,12 @@ _ilogger = get_logger(__name__)
 def handle_technical_indicators(arguments: dict[str, Any]) -> dict[str, Any]:
     """计算技术指标 + 信号识别"""
     from typing import Any
-    from mcp_finance.api import get_kline_a, get_realtime_quote_a
+    from mcp_finance.api import get_kline_a
+    from mcp_finance.data import STOCK_MAPPING
 
     code = arguments["code"]
-    pass  # secid removed, using code directly
     days = min(arguments.get("days", 120), 800)
     ktype = arguments.get("ktype", "daily")
-    klt_map = {"daily": "101", "weekly": "102", "monthly": "103"}
-    klt = klt_map.get(ktype, "101")
 
     klines = get_kline_a(code, period=ktype, adjust="qfq", limit=days)
     if not klines:
@@ -471,21 +469,21 @@ def handle_technical_indicators(arguments: dict[str, Any]) -> dict[str, Any]:
     dates = [k["日期"] for k in klines]
     result = compute_all_indicators(klines, dates)
 
-    quote = [get_realtime_quote_a(code)]
-    if quote:
-        q = quote[0]
-        result["实时行情"] = {
-            "代码": q.get("代码", code),
-            "名称": q.get("名称", ""),
-            "最新价": q.get("最新价"),
-            "涨跌幅": q.get("涨跌幅"),
-            "今开": q.get("今开"),
-            "昨收": q.get("昨收"),
-            "最高": q.get("最高"),
-            "最低": q.get("最低"),
-            "成交量(手)": q.get("成交量(手)"),
-            "成交额(元)": q.get("成交额(元)"),
-        }
+    # 用 K 线最后一条数据代替实时行情调用（避免串行超时）
+    latest = klines[-1]
+    result["实时行情"] = {
+        "代码": code,
+        "名称": STOCK_MAPPING.get(code, code),
+        "最新价": latest.get("收盘价"),
+        "涨跌幅": latest.get("涨跌幅"),
+        "今开": latest.get("开盘价"),
+        "昨收": None,
+        "最高": latest.get("最高价"),
+        "最低": latest.get("最低价"),
+        "成交量(手)": latest.get("成交量(手)"),
+        "成交额(元)": latest.get("成交额(元)"),
+        "数据源": "K线(最新日)",
+    }
 
     _ilogger.info("技术指标计算: %s days=%d", code, len(klines))
     return result

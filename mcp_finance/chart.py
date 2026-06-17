@@ -325,7 +325,7 @@ def generate_kline_chart(
         safe_name = stock_name.replace("/", "_").replace("\\", "_") if stock_name else "chart"
         output_path = os.path.join(chart_dir, f"{safe_name}_{ts}.html")
 
-    html = fig.to_html(include_plotlyjs=True, full_html=True)
+    html = fig.to_html(include_plotlyjs="cdn", full_html=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 
@@ -447,7 +447,7 @@ def generate_backtest_chart(
         safe_name = stock_name.replace("/", "_").replace("\\", "_")
         output_path = os.path.join(chart_dir, f"{safe_name}_backtest_{ts}.html")
 
-    html = fig.to_html(include_plotlyjs=True, full_html=True)
+    html = fig.to_html(include_plotlyjs="cdn", full_html=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 
@@ -465,22 +465,19 @@ _clogger = get_logger(__name__)
 def handle_plot_kline(arguments: dict[str, Any]) -> dict[str, Any]:
     """生成交互式 K 线图 handler"""
     from typing import Any
-    from mcp_finance.api import get_kline_a, get_realtime_quote_a
+    from mcp_finance.api import get_kline_a
     from mcp_finance.indicators import compute_all_indicators
+    from mcp_finance.data import STOCK_MAPPING
 
     code = arguments["code"]
-    pass  # secid removed
     days = min(arguments.get("days", 120), 800)
     ktype = arguments.get("ktype", "daily")
-    klt_map = {"daily": "101", "weekly": "102", "monthly": "103"}
-    klt = klt_map.get(ktype, "101")
 
     klines = get_kline_a(code, period=ktype, adjust="qfq", limit=days)
     if not klines:
         raise NoDataError(f"无法获取 {code} 的 K 线数据")
 
-    quotes = [get_realtime_quote_a(code)]
-    stock_name = quotes[0]["名称"] if quotes else code
+    stock_name = STOCK_MAPPING.get(code, code)
     indicators = compute_all_indicators(klines)
 
     show_macd = arguments.get("show_macd", True)

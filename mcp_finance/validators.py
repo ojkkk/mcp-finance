@@ -91,10 +91,6 @@ class NorthFlowParams(BaseModel):
     days: int = Field(default=5, ge=1, le=30, description="最近几天")
 
 
-class SearchParams(BaseModel):
-    keyword: str = Field(..., min_length=1, max_length=50, description="搜索关键词")
-    top_n: int = Field(default=10, ge=1, le=50)
-
 
 class TechnicalIndicatorsParams(StockCodeModel):
     days: int = Field(default=120, ge=30, le=800, description="K线条数")
@@ -181,27 +177,6 @@ class OptimizeParams(StockCodeModel):
     def validate_strategy(cls, v: str) -> str:
         if v not in {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal"}:
             raise ValueError("strategy 必须是 ma_cross/macd_signal/rsi_signal/kdj_signal/boll_signal")
-        return v
-
-
-class AlertParams(StockCodeModel):
-    price_above: Optional[float] = Field(default=None, gt=0)
-    price_below: Optional[float] = Field(default=None, gt=0)
-    gain_above: Optional[float] = Field(default=None, ge=0, le=100)
-    gain_below: Optional[float] = Field(default=None, ge=0, le=100)
-    macd_golden: bool = False
-    macd_death: bool = False
-    ma_golden: bool = False
-    ma_death: bool = False
-    rsi_above: Optional[float] = Field(default=None, ge=0, le=100)
-    rsi_below: Optional[float] = Field(default=None, ge=0, le=100)
-    push_channel: str = Field(default="dingtalk")
-
-    @field_validator("push_channel")
-    @classmethod
-    def validate_push_channel(cls, v: str) -> str:
-        if v not in {"dingtalk", "wecom", "serverchan"}:
-            raise ValueError("push_channel 必须是 dingtalk/wecom/serverchan")
         return v
 
 

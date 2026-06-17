@@ -19,3 +19,11 @@ charts/
 .venv/
 venv/
 env/
+# Codex internal
+.reasonix/
+.codegraph/
+.kline_cache/
+.codex/
+**/.reasonix/
+**/.codegraph/
+**/.kline_cache/

@@ -12,13 +12,12 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/MCP-1.4+-purple?logo=modelcontextprotocol" alt="MCP 1.4+">
-  <img src="https://img.shields.io/badge/version-0.4.0-orange" alt="Version 0.4.0">
+  <img src="https://img.shields.io/badge/version-0.6.0-orange" alt="Version 0.6.0">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
-  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome">
-  <img src="https://img.shields.io/badge/data-AKShare-red" alt="AKShare Data">
+  <img src="https://img.shields.io/badge/data-easy--tdx%20%2B%20AKShare-blue" alt="Dual Data Source">
 </p>
 
-> Global market data at your AI's fingertips — A-shares, HK, US, futures, all through AKShare.
+> Real-time multi-market data at your AI's fingertips — A-shares, HK, US, futures, via easy-tdx (TDX TCP) + AKShare.
 
 ---
 
@@ -28,15 +27,15 @@
 
 **The solution**: mcp-finance gives AI a **real-time, structured, computable** multi-market data source:
 
--  **Multi-Market** — A-shares + HK stocks + US stocks + China futures in one MCP Server
--  **Real-time Quotes** — AKShare unified data backend, stable and reliable
--  **Technical Analysis** — 9 indicators computed locally, 10+ signal patterns
--  **Stock Screener** — 11-dimension screening (gain, volume, turnover, PE, PB, ROE, market cap, etc.)
--  **Backtesting** — vectorbt-powered 5 strategies (MA/MACD/RSI/KDJ/BOLL) with Buy & Hold benchmark
--  **Optimization** — Grid-scan parameter combinations for optimal strategy settings
--  **Alerts** — Price/indicator triggers  DingTalk / WeCom / ServerChan push
--  **K-line Charts** — Interactive Plotly HTML, candles + MA + MACD/KDJ/RSI
--  **Premium Data** — Dragon Tiger Board, Block Trades, Margin Trading
+- **Multi-Market** — A-shares + HK stocks + US stocks + China futures in one MCP Server
+- **Dual Data Source** — easy-tdx (TDX TCP, millisecond-level) + AKShare (financials/sectors), stable and reliable
+- **Technical Analysis** — 9 indicators computed locally, 10+ signal patterns
+- **Stock Screener** — 11-dimension screening (gain, volume, turnover, PE, PB, ROE, market cap, etc.)
+- **Backtesting** — Backtrader event-driven engine, 5 strategies (MA/MACD/RSI/KDJ/BOLL) with Buy & Hold benchmark
+- **Optimization** — Grid-scan parameter combinations for optimal strategy settings
+- **Alerts** — Price/indicator triggers DingTalk / WeCom / ServerChan push
+- **K-line Charts** — Interactive Plotly HTML, candles + MA + MACD/KDJ/RSI
+- **Premium Data** — Dragon Tiger Board, Block Trades, Margin Trading
 
 ---
 
@@ -44,6 +43,7 @@
 
 - **Python** 3.10 or higher
 - Virtual environment recommended (venv / conda)
+- easy-tdx requires access to TDX market servers (default ports 7709/7727)
 
 ---
 
@@ -63,9 +63,9 @@ python -m venv .venv
 pip install -e .
 ```
 
-**Core Dependencies**: `mcp` / `pydantic` / `akshare` / `plotly` / `numpy` / `pandas` / `vectorbt`
+**Core Dependencies**: `mcp` / `pydantic` / `easy-tdx` / `akshare` / `plotly` / `numpy` / `pandas` / `backtrader`
 
->  AKShare manages all data sources — zero config required.
+> easy-tdx connects to TDX servers via TCP for millisecond real-time data; AKShare supplements financial/sector data.
 
 ### Configuration
 
@@ -152,14 +152,12 @@ codex mcp add mcp-finance -- python -m mcp_finance.server
 | `optimize_strategy` | Parameter grid-scan optimization | `code` |
 
 **Strategies**: ma_cross, macd_signal, rsi_signal, kdj_signal, boll_signal
-
-A-share rules: T+1 / price-limit filtering / commission + stamp tax
+**Engine**: Backtrader event-driven engine. A-share rules: T+1 / price-limit filtering / commission + stamp tax
 
 ### Alerts
 
 | Tool | Description | Required |
 |------|-------------|----------|
-| `set_alert` | Set alert conditions + immediate evaluation | `code` |
 
 **Conditions**: price above/below, gain threshold, MACD golden/death cross, MA golden/death cross, RSI extremes
 **Channels**: DingTalk / WeCom / ServerChan
@@ -184,7 +182,7 @@ A-share rules: T+1 / price-limit filtering / commission + stamp tax
 
 | Tool | Description |
 |------|-------------|
-| `test_data_sources` | Test all data sources (A/HK/US/futures/north-flow) |
+| `test_data_sources` | Test all data sources (A/HK/US/futures) |
 
 ---
 
@@ -194,7 +192,7 @@ A-share rules: T+1 / price-limit filtering / commission + stamp tax
 |----------|--------|
 | A-share quote | "What's the price of Moutai (600519)?" |
 | HK quote | "How much is Tencent (00700) in HK?" |
-| US quote | "What's AAPL stock price?" |
+| US quote | "What's AAPL stock price? And NVDA?" |
 | Futures | "Show me rebar futures prices" |
 | Technical analysis | "Analyze BYD's indicators — any golden crosses?" |
 | Financials | "What's CATL's revenue and ROE trend?" |
@@ -207,14 +205,15 @@ A-share rules: T+1 / price-limit filtering / commission + stamp tax
 
 ---
 
-## Data Source
+## Data Sources
 
 | Source | Description | Coverage |
 |--------|-------------|----------|
-| **AKShare** | Open-source financial data Python library | A-shares/HK/US/futures/indices/sectors/flows/premium-data |
+| **easy-tdx** | TDX TCP protocol, millisecond real-time, no API key | A/HK/US/Futures K-lines + quotes + sectors + flows |
+| **AKShare** | Open-source financial data library (Sina/Tonghuashun) | Financials, Dragon Tiger, Block Trades, Margin Trading |
 
->  Single source, unified API, zero config. Just `pip install`.
-> AKShare (https://akshare.akfamily.xyz/) internally integrates EastMoney, Sina, Tencent and other data providers.
+> easy-tdx connects directly to TDX market servers (port 7709) with millisecond latency and no rate limits.
+> AKShare serves as a supplement for financial data and premium content not covered by easy-tdx.
 
 ---
 
@@ -223,24 +222,23 @@ A-share rules: T+1 / price-limit filtering / commission + stamp tax
 ```
 mcp-finance/
   pyproject.toml
-  README.md              (中文)
+  README.md              (Chinese)
   README.en.md           (English)
-  run_monitor.py         # Standalone monitoring daemon
   mcp_finance/
     __init__.py
-    api.py               # AKShare unified data layer (all markets)
-    data.py              # 200+ stock mappings & sectors
+    api.py               # easy-tdx + AKShare dual data source layer
+    data.py              # 230+ stock mappings (A/HK/US) & sectors
     indicators.py        # 9 indicators + signals (pure Python)
     screener.py          # Market-wide screening (11 dimensions)
-    backtest.py          # vectorbt backtesting + optimization
+    backtest.py          # Backtrader event-driven backtesting + optimization
     akshare_data.py      # Backward-compat re-export
-    monitor.py           # Alerts + push notifications
     chart.py             # Plotly interactive K-line charts
     server.py            # MCP Server (20+ tools + resources)
     errors.py            # Unified error types
     logging_config.py    # Structured logging
     validators.py        # Pydantic validation
     cache.py             # TTL cache
+    pybroker_strategy.py # PyBroker ML strategy (experimental)
   tests/
     test_indicators.py   # Indicator unit tests
     test_screener.py     # Screener unit tests
@@ -251,44 +249,29 @@ mcp-finance/
 ## Known Limitations & Roadmap
 
 ### Current Limitations
--  **Intraday tick data** not yet supported
--  **US/HK advanced data** — Currently basic quotes & K-lines; financials/sectors to be expanded
--  **Futures minute bars** — Daily-level only
+- **Intraday tick data** — Not yet exposed (easy-tdx already supports it)
+- **US/HK financials** — Basic quotes & K-lines only; advanced data to be expanded
+- **Futures minute bars** — Daily-level only
 
-### Planned
+### v0.6.0 Update
+- [x] **easy-tdx primary source** — Millisecond TDX TCP real-time quotes, default priority
+- [x] **Auto-compute change %/amount** — Fallback calculation from close/pre_close for AKShare
+- [x] **Import deadlock fix** — Lazy imports moved to module-level, eliminated 120s timeout
+- [x] **Process leak fix** — Stale MCP server processes no longer accumulate
+- [x] **try/except/finally fixes** — 4 structural errors + thread pool leak resolved
+- [x] **PyBroker ML strategy** — Walkforward Analysis + technical feature engineering
+- [x] **Backtrader engine** — Event-driven, 5 strategies, A-share rules adapted
 
->  See [DEVELOPMENT_REPORT.md](./DEVELOPMENT_REPORT.md) for the comprehensive roadmap.
-
-** P0 — High Priority (Done)**
-- [x] **Backtesting Tool** — vectorbt-powered with parameter optimization
-- [x] **Screener overhaul** — Expanded to 11 filter dimensions
-- [x] **All-market coverage** — A-shares + HK + US + futures via AKShare
-- [x] **Unified data source** — AKShare single backend, removed multi-source complexity
-- [x] **Unit tests** — Core indicators + screener coverage
-
-** P1 — Medium Priority**
-- [ ] HK/US financial data & advanced analytics
-- [ ] Individual stock money flow
-- [ ] Web Dashboard (FastAPI + lightweight frontend)
-- [ ] Multi-agent analysis
-
-** P2 — Long-term**
-- [ ] Pattern recognition
-- [ ] Intraday / tick-level data
-- [ ] Crypto support
-- [ ] Docker + PyPI deployment
-- [ ] News sentiment & research reports
-
-> PRs and Issues are always welcome!
 
 ---
 
 ## Credits
 
-- [**AKShare**](https://akshare.akfamily.xyz/) — One-stop open-source financial data library
-- [**Plotly**](https://plotly.com/python/) — Powerful interactive charting
+- [**easy-tdx**](https://github.com/handsomejustin/easy-tdx) — Open-source TDX TCP protocol client, millisecond multi-market data
+- [**AKShare**](https://akshare.akfamily.xyz/) — Open-source financial data library
+- [**Backtrader**](https://www.backtrader.com/) — Event-driven backtesting framework
+- [**Plotly**](https://plotly.com/python/) — Interactive charting
 - [**MCP**](https://modelcontextprotocol.io/) — Standard protocol for AI tool calling
-- [**vectorbt**](https://vectorbt.dev/) — Vectorized backtesting engine
 
 ---
 
