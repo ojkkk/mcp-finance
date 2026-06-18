@@ -1,7 +1,7 @@
 <h1 align="center"> mcp-finance</h1>
 <p align="center">
   <strong>全市场实时行情 MCP Server</strong><br>
-  让 AI 助手直接查询 A股/港股/美股/期货行情、计算技术指标、筛选股票、回测策略、盯盘告警、生成 K 线图表
+  AI 助手直接查询 A股/港股/美股/期货行情、计算技术指标、筛选股票、回测策略、生成 K 线图表
 </p>
 
 <p align="center">
@@ -21,51 +21,35 @@
 
 ## 为什么选 mcp-finance？
 
-> 百度搜到的股票数据是静态网页，AI 无法直接做技术分析、筛选、对比。
-
 mcp-finance 给了 AI 一个**实时、结构化、可计算**的全市场数据源：
 
 - **全市场覆盖** — A股 + 港股 + 美股 + 国内期货，一个 MCP Server 搞定
-- **双数据源** — easy-tdx 通达信 TCP 协议（毫秒级）+ AKShare（财务/板块等补充），稳定可靠
-- **技术分析** — 9 大指标本地计算，金叉死叉自动识别
-- **条件选股** — 全市场 A 股按 11 个维度筛选（涨跌幅/量比/换手率/PE/PB/ROE/主力净流入等）
-- **策略回测** — 基于 Backtrader 事件驱动引擎，含双均线/MACD/RSI/KDJ/BOLL 策略回测 + 参数优化
-- **参数优化** — 网格扫描参数组合，自动找最优参数（夏普/收益率/回撤/胜率多种目标）
-- **盯盘告警** — 价格突破/金叉死叉/超买超卖 钉钉/企业微信/Server酱推送
-- **K线图表** — Plotly 交互式 HTML，蜡烛图+均线+MACD/KDJ/RSI
-- **高级数据** — 龙虎榜/大宗交易/两融数据全覆盖
+- **双数据源** — easy-tdx 通达信 TCP 协议（毫秒级）+ AKShare（财务/板块等补充）
+- **技术分析** — 9 大指标纯 Python 本地计算，金叉死叉自动识别
+- **条件选股** — 全市场 A 股按涨跌幅/量比/换手率/PE/PB/市值等 11 维度筛选
+- **策略回测** — Backtrader 事件驱动引擎，5 种策略 + 参数网格优化
+- **K线图表** — Plotly 交互式 HTML，蜡烛图+均线+MACD/KDJ/RSI，可缩放平移
+- **高级数据** — 龙虎榜/大宗交易/两融/北向资金全覆盖
 
 ---
 
-## 环境要求
-
-- **Python** 3.10 或更高版本
-- 建议使用虚拟环境（venv / conda）安装
-- easy-tdx 需要能访问通达信行情服务器（默认端口 7709/7727）
-
----
-
-## 快速开始
+## 安装
 
 ```bash
-# 1. 克隆
+# PyPI 安装（推荐）
+pip install mcp-finance
+
+# 或从源码安装
 git clone https://github.com/ojkkk/mcp-finance.git
 cd mcp-finance
-
-# 2. 推荐：创建虚拟环境
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-
-# 3. 安装
 pip install -e .
 ```
 
-**核心依赖**：`mcp` / `pydantic` / `easy-tdx` / `akshare` / `plotly` / `numpy` / `pandas` / `backtrader`
+**依赖**：Python 3.10+, easy-tdx, akshare, plotly, pandas, numpy, backtrader, pydantic, mcp
 
-> easy-tdx 通过通达信 TCP 协议获取毫秒级实时行情；AKShare 作为财务/板块数据补充。
+---
 
-### 配置
+## 配置
 
 <details>
 <summary><b>Claude Desktop</b></summary>
@@ -88,16 +72,6 @@ pip install -e .
 ```bash
 codex mcp add mcp-finance -- python -m mcp_finance.server
 ```
-
-或 `.codex.yaml`:
-
-```yaml
-mcp:
-  servers:
-    mcp-finance:
-      command: python
-      args: ["-m", "mcp_finance.server"]
-```
 </details>
 
 <details>
@@ -107,7 +81,6 @@ mcp:
 {
   "mcpServers": {
     "mcp-finance": {
-      "type": "stdio",
       "command": "python",
       "args": ["-m", "mcp_finance.server"]
     }
@@ -118,85 +91,69 @@ mcp:
 
 ---
 
-## 全部工具 (20+ 个)
+## 全部工具 (17 个)
 
-### 基础行情 (全市场)
+### 基础行情
 
-| 工具 | 说明 | 必填参数 |
-|------|------|----------|
-| `get_realtime_quote` | 个股/指数实时行情 (A股/港股/美股/期货) | `code` |
-| `get_kline` | K 线数据（日/周/月 + 前/后复权）(A股/港股/美股/期货) | `code` |
-| `get_financials` | A股财务数据（营收/净利润/ROE/毛利率等） | `code` |
-| `get_market_indices` | 大盘指数实时行情 (A股/港股/美股) | — |
+| 工具 | 说明 | 必填 |
+|------|------|------|
+| `get_realtime_quote` | 个股实时行情 (A股/港股/美股/期货) | `code` |
+| `get_kline` | K线数据 日/周/月 + 前/后复权 | `code` |
+| `get_financials` | A股财务数据（营收/净利润/ROE等） | `code` |
+| `get_market_indices` | 大盘指数 (A股/港股/美股) | — |
 | `get_sector_ranking` | A股行业/概念板块涨幅排行 | — |
 | `get_north_flow` | 北向/南向资金日流向 | — |
-| `search_stock` | 按代码或名称模糊搜索 (A股/港股/美股) | `keyword` |
 | `get_futures_list` | 国内期货合约实时行情列表 | — |
 | `batch_quotes` | 批量查询多只股票行情 | `codes` |
 
 ### 技术分析
 
-| 工具 | 说明 | 必填参数 |
-|------|------|----------|
+| 工具 | 说明 | 必填 |
+|------|------|------|
 | `get_technical_indicators` | 9 指标一键计算 + 信号识别 | `code` |
 
-**计算的指标**：
-MA(5/10/20/60/120/250)、MACD(DIF/DEA/柱)、KDJ(K/D/J)、RSI(6/14/24)、
-BOLL(上/中/下轨)、WR(威廉)、BIAS(乖离率)
+计算指标：MA(5/10/20/60/120/250)、MACD、KDJ、RSI(6/14/24)、BOLL、WR、BIAS
 
-**自动识别的信号**：
-均线金叉/死叉 MACD金叉/死叉 MACD柱转正/转负
-KDJ超买/超卖 RSI严重超买(>80)/超卖(<20)
-RSI偏高(>70)/偏低(<30) 均线多头/空头排列
+自动信号：金叉/死叉（均线/MACD/KDJ）、超买超卖（KDJ/RSI）、MACD柱转正/负、均线多头/空头排列
 
 ### 条件选股
 
-| 工具 | 说明 | 必填参数 |
-|------|------|----------|
-| `stock_screener` | 全市场多维度筛选 | 至少一个条件 |
+| 工具 | 说明 | 必填 |
+|------|------|------|
+| `stock_screener` | 全市场 11 维度筛选 A 股 | 至少一个条件 |
 
-**支持的筛选条件（11 个维度）**：涨跌幅、量比、换手率、市盈率、市净率、ROE、总市值、主力净流入、股息率、振幅、最高涨跌幅
+支持条件：涨跌幅 / 量比 / 换手率 / 市盈率 / 市净率 / 总市值 / ROE / 股息率 / 主力净流入
 
-### 策略回测 & 优化
+### 策略回测
 
-| 工具 | 说明 | 必填参数 |
-|------|------|----------|
-| `backtest_strategy` | 策略回测（5种策略+买入持有基准） | `code` |
-| `optimize_strategy` | 参数扫描优化 | `code` |
+| 工具 | 说明 | 必填 |
+|------|------|------|
+| `backtest_strategy` | 单策略回测 + 绩效统计 | `code` |
+| `optimize_strategy` | 参数网格优化，自动找最优参数 | `code` |
 
-**支持策略**：ma_cross(双均线交叉)、macd_signal(MACD金叉死叉)、rsi_signal(RSI超买超卖)、kdj_signal(KDJ金叉死叉)、boll_signal(BOLL突破)
-
-**回测引擎**：Backtrader 事件驱动引擎，A 股规则适配：T+1 / 涨跌停过滤 / 千一佣金 / 卖方印花税 / 整数手
-
-### 盯盘告警
-
-| 工具 | 说明 | 必填参数 |
-|------|------|----------|
-
-**告警条件**：价格突破/跌破、涨跌幅阈值、MACD金叉死叉、均线金叉死叉、RSI超买超卖
-**推送渠道**：钉钉机器人 / 企业微信 / Server酱(微信)
+支持策略：双均线交叉 / MACD金叉死叉 / RSI超买超卖 / KDJ金叉死叉 / BOLL突破
 
 ### 图表
 
-| 工具 | 说明 | 必填参数 |
-|------|------|----------|
-| `plot_kline` | 交互式 K 线 HTML（蜡烛图+均线+MACD/KDJ/RSI） | `code` |
+| 工具 | 说明 | 必填 |
+|------|------|------|
+| `plot_kline` | 交互式 K 线 HTML（蜡烛图+均线+副图） | `code` |
 
-> **这不是PNG图片！** 生成的是交互式HTML文件，请用浏览器打开，支持缩放/平移/悬停查看数值
+> 生成的是交互式HTML文件，浏览器打开支持缩放/平移/悬停查看数值
 
 ### 高级数据
 
-| 工具 | 说明 | 必填参数 |
-|------|------|----------|
-| `get_dragon_tiger` | 龙虎榜每日明细 | — |
-| `get_block_trades` | 大宗交易明细 | — |
-| `get_margin_trading` | 融资融券（两融）数据 | — |
+| 工具 | 说明 |
+|------|------|
+| `get_dragon_tiger` | 龙虎榜每日明细 |
+| `get_block_trades` | 大宗交易明细 |
+| `get_margin_trading` | 融资融券（两融）数据 |
 
 ### 诊断
 
 | 工具 | 说明 |
 |------|------|
-| `test_data_sources` | 诊断全市场数据源(A股/港股/美股/期货)可用性 |
+| `test_data_sources` | 诊断全市场数据源可用性 |
 
 ---
 
@@ -206,31 +163,29 @@ RSI偏高(>70)/偏低(<30) 均线多头/空头排列
 |------|----------|
 | A股行情 | "查一下茅台(600519)的最新价和涨跌幅" |
 | 港股行情 | "腾讯(00700)港股现在多少钱？" |
-| 美股行情 | "AAPL 苹果股价多少？英伟达 NVDA 什么价？" |
+| 美股行情 | "AAPL 苹果股价多少？" |
 | 期货行情 | "看看螺纹钢期货行情" |
+| K线数据 | "给我茅台最近 60 天的日 K 线，前复权" |
 | 技术分析 | "帮我分析比亚迪的技术指标，有没有金叉？RSI 超卖没有？" |
 | 财务分析 | "恒瑞医药最近几期营收和 ROE 趋势" |
 | 资金面 | "这周北向资金是流入还是流出？" |
-| 选股 | "全市场扫描：涨超 3%、量比 > 1.5、换手率 > 5%、ROE > 10%" |
-| 回测 | "帮我用双均线(5,20)回测美的集团 2024 年，跟买入持有对比" |
-|  | "MACD 金叉死叉策略回测宁德时代，初始资金 50 万" |
+| 选股 | "全市场扫描：涨超 3%、量比 > 1.5、换手率 > 5%、PE < 50" |
+| 回测 | "用双均线(5,20)回测美的集团 2024 年，跟买入持有对比" |
 | 参数优化 | "帮我找找美的集团双均线的最佳参数" |
-| 盯盘 | "盯着茅台，跌破 1800 或 MACD 死叉就钉钉通知我" |
 | 画图 | "画一张茅台最近 120 天的 K 线图，带上 MACD 和 RSI" |
 | 板块 | "今天哪个行业板块涨得最好？" |
-| 期货 | "列出所有期货合约的实时行情" |
+| 期货列表 | "列出所有期货合约的实时行情" |
 
 ---
 
 ## 数据源
 
-| 源 | 说明 | 覆盖范围 |
-|----|------|----------|
-| **easy-tdx** | 通达信 TCP 协议，毫秒级实时行情，无需 API Key | A股/港股/美股/期货 K线+实时报价+板块+资金流向 |
-| **AKShare** | 开源金融数据接口，新浪/同花顺源 | 财务数据/龙虎榜/大宗交易/两融/北向资金 |
+| 源 | 说明 | 覆盖 |
+|----|------|------|
+| **easy-tdx** | 通达信 TCP 协议，毫秒级实时行情 | A股/港股/美股/期货 实时报价+K线 |
+| **AKShare** | 开源金融数据接口 | 财务数据/龙虎榜/大宗交易/两融/北向资金 |
 
-> easy-tdx 直连通达信行情服务器（端口 7709），毫秒级响应，无速率限制。
-> AKShare 仅作为 easy-tdx 未覆盖的财务/高级数据补充，使用新浪/同花顺源（东方财富源在部分网络环境下不可达）。
+easy-tdx 优先（毫秒级），不可用时自动降级到 AKShare。
 
 ---
 
@@ -239,47 +194,34 @@ RSI偏高(>70)/偏低(<30) 均线多头/空头排列
 ```
 mcp-finance/
   pyproject.toml
-  README.md              # 中文文档
-  README.en.md           # English documentation
+  README.md              # 中文
+  README.en.md           # English
+  LICENSE                # MIT
   mcp_finance/
-    __init__.py
-    api.py               # easy-tdx + AKShare 双数据源封装层
-    data.py              # 230+ 股票映射 (A股/港股/美股) & 行业分类
-    indicators.py        # 9 大技术指标 + 信号识别（纯Python）
-    screener.py          # 全市场条件筛选（11 维度）
-    backtest.py          # Backtrader 事件驱动回测引擎 + 参数优化
-    akshare_data.py      # 向后兼容 re-export 层
-    chart.py             # Plotly 交互式 K 线图
-    server.py            # MCP Server（20+ tools + resources）
-    errors.py            # 统一错误类型
-    logging_config.py    # 结构化日志
-    validators.py        # Pydantic 参数校验
-    cache.py             # TTL 缓存
-    pybroker_strategy.py # PyBroker ML 策略模块（实验性）
+    __init__.py           # 版本号
+    server.py             # MCP Server 路由 (17 tools + resources)
+    api.py                # easy-tdx + AKShare 双数据源封装
+    data.py               # 230+ 股票代码名称映射
+    indicators.py         # 9 大技术指标 + 信号识别
+    screener.py           # 全市场条件选股
+    backtest.py           # Backtrader 回测引擎 + 参数优化
+    chart.py              # Plotly 交互式 K 线图
+    pybroker_strategy.py  # PyBroker ML 策略（实验性）
+    errors.py             # 统一错误类型
+    validators.py         # Pydantic 参数校验
+    cache.py              # TTL 缓存
+    logging_config.py     # 结构化日志
+    akshare_data.py       # 向后兼容 re-export 层
   tests/
-    test_indicators.py   # 技术指标单元测试
-    test_screener.py     # 选股器单元测试
+    test_indicators.py    # 技术指标单元测试
+    test_screener.py      # 选股器单元测试
 ```
-
----
-
-## 已知限制 & 路线图
-
-### v0.6.0 更新
-- [x] **easy-tdx 主数据源** — 毫秒级通达信 TCP 实时行情，默认优先
-- [x] **涨跌幅/涨跌额自动计算** — AKShare 回退时从 close/pre_close 推算
-- [x] **import 死锁修复** — handler 内延迟导入改为模块级预导入，消除 120s 超时
-- [x] **进程泄漏修复** — 旧版 MCP server 进程不再无限累积
-- [x] **try/except/finally 结构修复** — 4 处异常处理错误 + 线程池泄漏
-- [x] **PyBroker ML 策略模块** — Walkforward Analysis + 技术特征工程
-- [x] **Backtrader 回测引擎** — 事件驱动，5 种策略，A 股规则适配
-
 
 ---
 
 ## 致谢
 
-- [**easy-tdx**](https://github.com/handsomejustin/easy-tdx) — 开源通达信 TCP 协议行情客户端，毫秒级全市场数据
+- [**easy-tdx**](https://github.com/handsomejustin/easy-tdx) — 开源通达信 TCP 协议行情客户端
 - [**AKShare**](https://akshare.akfamily.xyz/) — 开源金融数据接口库
 - [**Backtrader**](https://www.backtrader.com/) — 事件驱动回测框架
 - [**Plotly**](https://plotly.com/python/) — 交互式图表
@@ -290,14 +232,3 @@ mcp-finance/
 ## License
 
 [MIT](LICENSE)
-
----
-
-<p align="center">
-  如果这个项目对你有用，请给一个 Star！<br>
-  <sub>欢迎提交 PR 和 Issue — 新指标、新数据源、新推送渠道……</sub>
-</p>
-
-<p align="center">
-  <a href="README.en.md">Read this in English</a>
-</p>
