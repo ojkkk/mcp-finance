@@ -157,12 +157,13 @@ def screen_stocks(
             continue
         if max_pb is not None and (pb is not None and pb > max_pb):
             continue
-        # ROE/股息率/主力净流入 — 数据暂未提供时排除（设了条件但值为None则排除）
-        if min_roe is not None and (roe is None or roe < min_roe):
+        # ROE/股息率/主力净流入 — 当前数据源暂未提供，设置了筛选条件时跳过该维度（不排除）
+        # TODO: 接入 AKShare 个股财务指标接口后可启用实际筛选
+        if min_roe is not None and roe is not None and roe < min_roe:
             continue
-        if min_main_inflow is not None and (main_inflow is None or main_inflow < min_main_inflow):
+        if min_main_inflow is not None and main_inflow is not None and main_inflow < min_main_inflow:
             continue
-        if min_dividend is not None and (dividend is None or dividend < min_dividend):
+        if min_dividend is not None and dividend is not None and dividend < min_dividend:
             continue
 
 

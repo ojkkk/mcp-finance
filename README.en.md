@@ -122,7 +122,7 @@ Signals: golden/death cross, overbought/oversold, MACD bar reversal, MA alignmen
 |------|-------------|----------|
 | `stock_screener` | Multi-dimension A-share screening | >= 1 filter |
 
-Filters: gain%, volume ratio, turnover%, PE, PB, market cap, ROE, dividend%, main inflow
+Filters: gain%, volume ratio, turnover%, PE, PB, market cap
 
 ### Backtesting
 
@@ -169,7 +169,7 @@ Strategies: MA cross, MACD signal, RSI signal, KDJ signal, BOLL signal
 | Technical | "Analyze BYD indicators, any golden cross?" |
 | Financials | "Hengrui Pharma recent revenue and ROE trend" |
 | Fund flow | "Is north-bound flow net buying this week?" |
-| Screener | "Scan A-shares: gain>3%, vol ratio>1.5, PE<50" |
+| Screener | "Scan A-shares: gain>3%, vol ratio>1.5, PE<50, PB<5" |
 | Backtest | "Backtest Midea with MA(5,20) in 2024 vs buy&hold" |
 | Optimize | "Find best MA params for Midea" |
 | Chart | "Plot Moutai 120-day K-line with MACD and RSI" |

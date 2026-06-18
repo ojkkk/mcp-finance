@@ -35,12 +35,6 @@ class BacktestError(StockError):
         super().__init__(message, code="BACKTEST_ERROR")
 
 
-class AlertError(StockError):
-    """告警系统异常"""
-    def __init__(self, message: str):
-        super().__init__(message, code="ALERT_ERROR")
-
-
 def format_error_response(error: StockError) -> dict:
     """将 StockError 格式化为统一的 JSON 响应"""
     return {

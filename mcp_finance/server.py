@@ -324,7 +324,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="optimize_strategy",
-            description="参数优化：网格扫描策略参数组合，自动找出最优参数（基于 vectorbt 向量化引擎）",
+            description="参数优化：网格扫描策略参数组合，自动找出最优参数（基于 Backtrader 事件驱动引擎）",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -492,7 +492,7 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="mcp-finance",
-                server_version="0.4.0",
+                server_version="0.6.0",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},
