@@ -285,7 +285,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="stock_screener",
-            description="全市场 A 股筛选：按涨跌幅、量比、换手率、市盈率、市净率、ROE、市值、主力净流入、股息率等条件筛选股票，返回匹配列表",
+            description="全市场 A 股筛选：按涨跌幅、量比、换手率、市盈率、市净率、市值等条件筛选股票，返回匹配列表。注意：ROE/股息率/主力净流入 当前数据源暂不可用",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -296,9 +296,9 @@ async def list_tools() -> list[types.Tool]:
                     "max_pe": {"type": "number", "description": "最高市盈率（过滤亏损/高估值），如 50"},
                     "min_pb": {"type": "number", "description": "最低市净率 PB，如 1.0 表示至少 1 倍"},
                     "max_pb": {"type": "number", "description": "最高市净率 PB，如 5.0"},
-                    "min_roe": {"type": "number", "description": "最低净资产收益率 ROE(%)，如 10.0"},
-                    "min_main_inflow": {"type": "number", "description": "最低主力净流入（万元），正值表示净流入，如 5000"},
-                    "min_dividend": {"type": "number", "description": "最低股息率(%)，如 3.0"},
+                    "min_roe": {"type": "number", "description": "（暂不可用）最低净资产收益率 ROE(%)，如 10.0"},
+                    "min_main_inflow": {"type": "number", "description": "（暂不可用）最低主力净流入（万元），正值表示净流入，如 5000"},
+                    "min_dividend": {"type": "number", "description": "（暂不可用）最低股息率(%)，如 3.0"},
                     "min_market_cap": {"type": "number", "description": "最低总市值（亿元），如 100"},
                     "top_n": {"type": "integer", "description": "返回前 N 条"},
                 },

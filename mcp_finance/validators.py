@@ -113,9 +113,9 @@ class ScreenerParams(BaseModel):
     min_market_cap: Optional[float] = Field(default=None, ge=0)
     min_pb: Optional[float] = Field(default=None, ge=0)
     max_pb: Optional[float] = Field(default=None, ge=0)
-    min_roe: Optional[float] = Field(default=None, ge=-100, le=100)
-    min_main_inflow: Optional[float] = Field(default=None)
-    min_dividend: Optional[float] = Field(default=None, ge=0, le=100)
+    min_roe: Optional[float] = Field(default=None, ge=-100, le=100, description="（暂不可用）最低净资产收益率 ROE(%)")
+    min_main_inflow: Optional[float] = Field(default=None, description="（暂不可用）最低主力净流入（万元）")
+    min_dividend: Optional[float] = Field(default=None, ge=0, le=100, description="（暂不可用）最低股息率(%)")
     top_n: int = Field(default=50, ge=1, le=200)
 
 

@@ -124,6 +124,8 @@ Signals: golden/death cross, overbought/oversold, MACD bar reversal, MA alignmen
 
 Filters: gain%, volume ratio, turnover%, PE, PB, market cap
 
+> ROE/dividend%/main inflow currently unavailable (marked in schema)
+
 ### Backtesting
 
 | Tool | Description | Required |
