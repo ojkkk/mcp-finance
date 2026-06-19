@@ -6,36 +6,28 @@
   - 成交量变化（量比）
   - 市盈率 / 市净率
   - 总市值 / 流通市值
+  - ROE（净资产收益率，通过 AKShare 财务缓存获取）
+  - 主力净流入（通过 easy-tdx 实时行情获取）
 
-数据来源: 东方财富全市场行情接口 (push2.eastmoney.com)
+数据来源: 东方财富全市场行情接口 (push2.eastmoney.com) + AKShare 财务指标 + easy-tdx
 """
 
 from __future__ import annotations
 from typing import Any
 
-from mcp_finance.api import get_all_a_stocks_snapshot
+from mcp_finance.api import get_all_a_stocks_snapshot, get_main_inflow_batch
+from mcp_finance.financials import preload_financials
 
 
-# 东方财富 push2 接口字段对照
-# ──────────────────────────────────────
-# f2=最新价  f3=涨跌幅(%)  f4=涨跌额  f5=成交量(手)
-# f6=成交额(万)  f7=振幅(%)  f8=换手率(%)  f9=市盈率(动)
-# f10=量比  f12=代码  f14=名称
-# f15=最高  f16=最低  f17=今开  f18=昨收
-# f20=总市值(元)  f21=流通市值(元)
-# f23=市净率(PB)
-# ※ 注意: ROE(f37)/股息率(f45)/主力净流入(f62) 来自不同数据源，当前暂未接入
+# 慢速维度查询上限：候选股超过此数时，只对前 N 只做 ROE/主力净流入查询
+_MAX_SLOW_LOOKUPS = 150
 
 
 def _fetch_all_a_stocks(page: int = 1, page_size: int = 100) -> list[dict[str, Any]]:
-    """获取全市场 A 股行情数据（通过 AKShare）
-
-    注: page/page_size 参数保留仅用于兼容，实际总会返回全量数据。
-    """
+    """获取全市场 A 股行情数据"""
     data = get_all_a_stocks_snapshot()
     if not data:
         return []
-    # Convert to legacy format for backward compat
     result = []
     for item in data:
         result.append({
@@ -54,9 +46,9 @@ def _fetch_all_a_stocks(page: int = 1, page_size: int = 100) -> list[dict[str, A
             "f20": item.get("总市值"),
             "f21": item.get("流通市值"),
             "f23": item.get("市净率"),
-            "f37": None,  # ROE from different source
-            "f45": None,  # dividend from different source
-            "f62": None,  # main_inflow from different source
+            "f37": None,  # ROE
+            "f45": None,  # 股息率 — 暂未接入
+            "f62": None,  # 主力净流入
         })
     return result
 
@@ -68,7 +60,6 @@ def screen_stocks(
     min_turnover: float | None = None,
     max_pe: float | None = None,
     min_market_cap: float | None = None,
-    # ── 新增筛选维度（v0.2.0）──
     min_pb: float | None = None,
     max_pb: float | None = None,
     min_roe: float | None = None,
@@ -77,28 +68,12 @@ def screen_stocks(
     top_n: int = 50,
 ) -> dict[str, Any]:
     """
-    按条件筛选 A 股
+    按条件筛选 A 股（两遍过滤：快速维度 → ROE/主力净流入慢速维度）
 
-    Args:
-        min_gain:           最低涨跌幅 (%)
-        max_gain:           最高涨跌幅 (%)
-        min_volume_ratio:   最低量比（当日成交量/5日均量）
-        min_turnover:       最低换手率 (%)
-        max_pe:             最高市盈率（动）
-        min_market_cap:     最低总市值（亿元）
-        min_pb:             最低市净率 (倍)
-        max_pb:             最高市净率 (倍)
-        min_roe:            最低净资产收益率 ROE (%)
-        min_main_inflow:    最低主力净流入（万元），正值表示净流入
-        min_dividend:       最低股息率 (%)
-        top_n:              返回前 N 条
-
-    Returns:
-        {"matched": [...], "total_scanned": int, "conditions": {...}}
+    慢速维度（ROE/主力净流入）仅在候选股 ≤ 150 只时查询，超出则跳过慢速维度。
     """
     all_stocks = _fetch_all_a_stocks()
 
-    matched: list[dict[str, Any]] = []
     conditions = {
         "min_gain": min_gain,
         "max_gain": max_gain,
@@ -106,7 +81,6 @@ def screen_stocks(
         "min_turnover": min_turnover,
         "max_pe": max_pe,
         "min_market_cap": min_market_cap,
-        # 新增条件
         "min_pb": min_pb,
         "max_pb": max_pb,
         "min_roe": min_roe,
@@ -122,6 +96,13 @@ def screen_stocks(
         except (ValueError, TypeError):
             return None
 
+    # ── 判断是否需要慢速维度 ──
+    need_roe = min_roe is not None
+    need_inflow = min_main_inflow is not None
+    need_slow = need_roe or need_inflow or min_dividend is not None
+
+    # ── 第一遍：快速维度过滤 ──
+    candidates: list[dict[str, Any]] = []
     for item in all_stocks:
         code = item.get("f12", "")
         name = item.get("f14", "")
@@ -134,38 +115,78 @@ def screen_stocks(
         pe = _f(item.get("f9"))
         market_cap = _f(item.get("f20"))
         pb = _f(item.get("f23"))
+
+        if min_gain is not None and gain is not None and gain < min_gain:
+            continue
+        if max_gain is not None and (gain is not None and gain > max_gain):
+            continue
+        if min_volume_ratio is not None and volume_ratio is not None and volume_ratio < min_volume_ratio:
+            continue
+        if min_turnover is not None and turnover is not None and turnover < min_turnover:
+            continue
+        if max_pe is not None and pe is not None and pe > max_pe:
+            continue
+        if min_market_cap is not None and market_cap is not None and market_cap < min_market_cap * 1e8:
+            continue
+        if min_pb is not None and pb is not None and pb < min_pb:
+            continue
+        if max_pb is not None and (pb is not None and pb > max_pb):
+            continue
+
+        candidates.append(item)
+
+    # ── 慢速维度：候选股太多则跳过查询 ──
+    slow_skipped = False
+    if need_slow and candidates:
+        if len(candidates) > _MAX_SLOW_LOOKUPS:
+            slow_skipped = True
+        else:
+            # 按涨跌幅预排序，优先查涨幅高的
+            candidates.sort(key=lambda x: _f(x.get("f3")) or -999, reverse=True)
+
+            candidate_codes = [item["f12"] for item in candidates if item.get("f12")]
+
+            # ROE: 批量并行获取
+            if need_roe and candidate_codes:
+                fin_results = preload_financials(candidate_codes, max_workers=4)
+                for item in candidates:
+                    code = item.get("f12", "")
+                    if code and code in fin_results:
+                        fin = fin_results[code]
+                        if fin.get("roe") is not None:
+                            item["f37"] = fin["roe"]
+
+            # 主力净流入: 批量获取
+            if need_inflow and candidate_codes:
+                inflow_results = get_main_inflow_batch(candidate_codes)
+                for item in candidates:
+                    code = item.get("f12", "")
+                    if code and code in inflow_results and inflow_results[code] is not None:
+                        item["f62"] = inflow_results[code] / 10000  # 元 → 万元
+
+    # ── 构建结果 ──
+    matched: list[dict[str, Any]] = []
+    for item in candidates:
+        code = item.get("f12", "")
+        name = item.get("f14", "")
+
+        gain = _f(item.get("f3"))
+        volume_ratio = _f(item.get("f10"))
+        turnover = _f(item.get("f8"))
+        pe = _f(item.get("f9"))
+        market_cap = _f(item.get("f20"))
+        pb = _f(item.get("f23"))
         roe = _f(item.get("f37"))
         dividend = _f(item.get("f45"))
         main_inflow = _f(item.get("f62"))
 
-        # 过滤 — 原有
-        if min_gain is not None and (gain is None or gain < min_gain):
-            continue
-        if max_gain is not None and (gain is not None and gain > max_gain):
-            continue
-        if min_volume_ratio is not None and (volume_ratio is None or volume_ratio < min_volume_ratio):
-            continue
-        if min_turnover is not None and (turnover is None or turnover < min_turnover):
-            continue
-        if max_pe is not None and (pe is None or pe > max_pe):
-            continue
-        if min_market_cap is not None and (market_cap is None or market_cap < min_market_cap * 1e8):
-            continue
-
-        # 过滤 — 新增
-        if min_pb is not None and (pb is None or pb < min_pb):
-            continue
-        if max_pb is not None and (pb is not None and pb > max_pb):
-            continue
-        # ROE/股息率/主力净流入 — 当前数据源暂未提供，设置了筛选条件时跳过该维度（不排除）
-        # TODO: 接入 AKShare 个股财务指标接口后可启用实际筛选
+        # 慢速维度过滤（仅当数据可用时才过滤）
         if min_roe is not None and roe is not None and roe < min_roe:
             continue
         if min_main_inflow is not None and main_inflow is not None and main_inflow < min_main_inflow:
             continue
         if min_dividend is not None and dividend is not None and dividend < min_dividend:
             continue
-
 
         matched.append({
             "代码": code,
@@ -189,12 +210,18 @@ def screen_stocks(
 
     matched.sort(key=lambda x: x["涨跌幅(%)"] if x["涨跌幅(%)"] is not None else -9999, reverse=True)
 
-    return {
-        "matched": matched[:top_n],
+    result = {
+        "matched": matched[:int(top_n)],
         "count": len(matched),
         "total_scanned": len(all_stocks),
         "conditions": conditions,
     }
+    if slow_skipped:
+        result["_note"] = f"慢速维度(ROE/主力净流入)已跳过：候选股过多({len(candidates)}只 > {_MAX_SLOW_LOOKUPS}上限)，请缩小快速维度条件后重试"
+
+    return result
+
+
 # ═══════════════════════════════════════════════════════════════
 # MCP Tool Handler
 # ═══════════════════════════════════════════════════════════════
@@ -207,8 +234,6 @@ _slogger = get_logger(__name__)
 
 def handle_stock_screener(arguments: dict[str, Any]) -> dict[str, Any]:
     """全市场股票筛选 handler"""
-    from typing import Any
-
     result = screen_stocks(
         min_gain=arguments.get("min_gain"),
         max_gain=arguments.get("max_gain"),

@@ -93,6 +93,7 @@ class NorthFlowParams(BaseModel):
 
 
 class TechnicalIndicatorsParams(StockCodeModel):
+    market: str = Field(default="a", description="市场: a/hk/us")
     days: int = Field(default=120, ge=30, le=800, description="K线条数")
     ktype: str = Field(default="daily", description="K线类型")
 
@@ -113,8 +114,8 @@ class ScreenerParams(BaseModel):
     min_market_cap: Optional[float] = Field(default=None, ge=0)
     min_pb: Optional[float] = Field(default=None, ge=0)
     max_pb: Optional[float] = Field(default=None, ge=0)
-    min_roe: Optional[float] = Field(default=None, ge=-100, le=100, description="（暂不可用）最低净资产收益率 ROE(%)")
-    min_main_inflow: Optional[float] = Field(default=None, description="（暂不可用）最低主力净流入（万元）")
+    min_roe: Optional[float] = Field(default=None, ge=-100, le=100, description="最低净资产收益率 ROE(%) — 通过财务缓存获取")
+    min_main_inflow: Optional[float] = Field(default=None, description="最低主力净流入（万元），正值表示净流入 — 通过 easy-tdx 获取")
     min_dividend: Optional[float] = Field(default=None, ge=0, le=100, description="（暂不可用）最低股息率(%)")
     top_n: int = Field(default=50, ge=1, le=200)
 
@@ -131,8 +132,8 @@ class BacktestParams(StockCodeModel):
     @field_validator("strategy")
     @classmethod
     def validate_strategy(cls, v: str) -> str:
-        if v not in {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal"}:
-            raise ValueError("strategy 必须是 ma_cross/macd_signal/rsi_signal/kdj_signal/boll_signal")
+        if v not in {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal", "turtle", "vol_trend", "mean_rev"}:
+            raise ValueError("strategy 必须是 ma_cross/macd_signal/rsi_signal/kdj_signal/boll_signal/turtle/vol_trend/mean_rev")
         return v
 
     @field_validator("fast_period")
@@ -175,12 +176,13 @@ class OptimizeParams(StockCodeModel):
     @field_validator("strategy")
     @classmethod
     def validate_strategy(cls, v: str) -> str:
-        if v not in {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal"}:
-            raise ValueError("strategy 必须是 ma_cross/macd_signal/rsi_signal/kdj_signal/boll_signal")
+        if v not in {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal", "turtle", "vol_trend", "mean_rev"}:
+            raise ValueError("strategy 必须是 ma_cross/macd_signal/rsi_signal/kdj_signal/boll_signal/turtle/vol_trend/mean_rev")
         return v
 
 
 class PlotKlineParams(StockCodeModel):
+    market: str = Field(default="a", description="市场: a/hk/us")
     days: int = Field(default=120, ge=10, le=800)
     ktype: str = Field(default="daily")
     show_macd: bool = True

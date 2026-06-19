@@ -23,7 +23,9 @@ env/
 .reasonix/
 .codegraph/
 .kline_cache/
+.financial_cache/
 .codex/
 **/.reasonix/
 **/.codegraph/
 **/.kline_cache/
+**/.financial_cache/

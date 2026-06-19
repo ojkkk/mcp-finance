@@ -1,8 +1,8 @@
 [project]
-name = "mcp-finance"
+name = "mcp-markets"
 version = "0.6.0"
 description = "全市场金融数据 MCP Server — A股/港股/美股/期货 行情/K线/技术指标/选股/回测 基于 easy-tdx + AKShare 双数据源"
-authors = [{name = "mcp-finance"}]
+authors = [{name = "mcp-markets", email = "mcp-finance@github.com"}]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,6 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Office/Business :: Financial :: Investment"
 ]
 keywords = ["mcp", "stock", "finance", "a-share", "hk-stock", "us-stock", "futures", "backtest", "technical-analysis", "akshare", "easy-tdx", "backtrader"]
@@ -38,7 +39,7 @@ dev = [
     "ruff>=0.4",
 ]
 all = [
-    "mcp-finance[dev]",
+    "mcp-markets[dev]",
 ]
 
 [project.urls]
@@ -50,11 +51,19 @@ issues = "https://github.com/ojkkk/mcp-finance/issues"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+
 [tool.hatch.build.targets.wheel]
 packages = ["mcp_finance"]
+exclude = [
+    "mcp_finance/.financial_cache/**",
+    "mcp_finance/.kline_cache/**",
+    "mcp_finance/.codegraph/**",
+    "mcp_finance/.reasonix/**",
+    "mcp_finance/__pycache__/**",
+]
 
 [project.scripts]
-mcp-finance = "mcp_finance.server:main"
+mcp-markets = "mcp_finance.server:cli"
 
 [tool.ruff]
 line-length = 120

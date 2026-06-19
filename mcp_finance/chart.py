@@ -470,10 +470,15 @@ def handle_plot_kline(arguments: dict[str, Any]) -> dict[str, Any]:
     from mcp_finance.data import STOCK_MAPPING
 
     code = arguments["code"]
+    market = arguments.get("market", "a")
     days = min(arguments.get("days", 120), 800)
     ktype = arguments.get("ktype", "daily")
 
-    klines = get_kline_a(code, period=ktype, adjust="qfq", limit=days)
+    from mcp_finance.api import get_kline_a, get_kline_hk, get_kline_us, get_kline_futures
+    kline_fn = {"a": get_kline_a, "hk": get_kline_hk, "us": get_kline_us, "futures": get_kline_futures}.get(market)
+    if kline_fn is None:
+        raise NoDataError(f"不支持的市场类型: {market}")
+    klines = kline_fn(code, period=ktype, adjust="qfq", limit=days) if market == "a" else kline_fn(code, period=ktype, limit=days)
     if not klines:
         raise NoDataError(f"无法获取 {code} 的 K 线数据")
 

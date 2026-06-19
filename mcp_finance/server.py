@@ -21,7 +21,6 @@ from mcp_finance.indicators import handle_technical_indicators
 from mcp_finance.screener import handle_stock_screener
 from mcp_finance.backtest import handle_backtest, handle_optimize
 from mcp_finance.chart import handle_plot_kline
-from mcp_finance.pybroker_strategy import handle_pybroker_backtest
 from mcp_finance.data import HOT_STOCKS
 from mcp_finance.errors import StockError
 from mcp_finance.logging_config import get_logger, set_level
@@ -276,7 +275,8 @@ async def list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "code": {"type": "string", "description": "6位股票代码，如 '600519'"},
+                    "code": {"type": "string", "description": "股票代码，如 '600519'(A股) / '00700'(港股) / 'AAPL'(美股)"},
+                    "market": {"type": "string", "description": "市场: a/hk/us，默认 a"},
                     "days": {"type": "integer", "description": "取多少根 K 线计算（建议 60-250，越多指标越完整）"},
                     "ktype": {"type": "string", "description": "K线类型: daily=日K, weekly=周K"},
                 },
@@ -285,7 +285,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="stock_screener",
-            description="全市场 A 股筛选：按涨跌幅、量比、换手率、市盈率、市净率、市值等条件筛选股票，返回匹配列表。注意：ROE/股息率/主力净流入 当前数据源暂不可用",
+            description="全市场 A 股筛选：按涨跌幅、量比、换手率、市盈率、市净率、ROE、主力净流入、市值等条件筛选股票，返回匹配列表。股息率暂不可用",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -296,7 +296,7 @@ async def list_tools() -> list[types.Tool]:
                     "max_pe": {"type": "number", "description": "最高市盈率（过滤亏损/高估值），如 50"},
                     "min_pb": {"type": "number", "description": "最低市净率 PB，如 1.0 表示至少 1 倍"},
                     "max_pb": {"type": "number", "description": "最高市净率 PB，如 5.0"},
-                    "min_roe": {"type": "number", "description": "（暂不可用）最低净资产收益率 ROE(%)，如 10.0"},
+                    "min_roe": {"type": "number", "description": "最低净资产收益率 ROE(%)，如 10.0 — 通过财务缓存获取"},
                     "min_main_inflow": {"type": "number", "description": "（暂不可用）最低主力净流入（万元），正值表示净流入，如 5000"},
                     "min_dividend": {"type": "number", "description": "（暂不可用）最低股息率(%)，如 3.0"},
                     "min_market_cap": {"type": "number", "description": "最低总市值（亿元），如 100"},
@@ -311,7 +311,7 @@ async def list_tools() -> list[types.Tool]:
                 "type": "object",
                 "properties": {
                     "code": {"type": "string", "description": "6位股票代码，如 '600519'"},
-                    "strategy": {"type": "string", "description": "策略名称: ma_cross=双均线交叉, macd_signal=MACD金叉死叉, rsi_signal=RSI超买超卖, kdj_signal=KDJ金叉死叉, boll_signal=BOLL突破"},
+                    "strategy": {"type": "string", "description": "策略名称: ma_cross=双均线 macd_signal=MACD rsi_signal=RSI kdj_signal=KDJ boll_signal=BOLL turtle=海龟 vol_trend=波动率趋势 mean_rev=均值回归"},
                     "fast_period": {"type": "integer", "description": "快线周期: 均线策略用(MA周期), MACD策略用(fast周期)"},
                     "slow_period": {"type": "integer", "description": "慢线周期: 均线策略用(MA周期), MACD策略用(slow周期)"},
                     "start_date": {"type": "string", "description": "回测开始日期，如 '2024-01-01'，默认一年前"},
@@ -349,7 +349,8 @@ async def list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "code": {"type": "string", "description": "6位股票代码，如 '600519'"},
+                    "code": {"type": "string", "description": "股票代码，如 '600519'(A股) / '00700'(港股) / 'AAPL'(美股)"},
+                    "market": {"type": "string", "description": "市场: a/hk/us，默认 a"},
                     "days": {"type": "integer", "description": "K 线条数"},
                     "ktype": {"type": "string", "description": "K线类型: daily=日K, weekly=周K"},
                     "show_macd": {"type": "boolean", "description": "是否显示 MACD 副图"},
@@ -408,7 +409,7 @@ _TOOL_VALIDATORS: dict[str, Any] = {}
 try:
     from mcp_finance.validators import (
         KlineParams, FinancialsParams, SectorRankingParams,
-        NorthFlowParams, SearchParams, TechnicalIndicatorsParams,
+        NorthFlowParams, TechnicalIndicatorsParams,
         ScreenerParams, BacktestParams, OptimizeParams,
         PlotKlineParams, validate_and_coerce,
     )
@@ -484,7 +485,7 @@ def _format_json(data: Any) -> str:
 # ================================================================
 
 async def main():
-    logger.info("mcp-finance v0.4.0 starting (AKShare - All Markets)...")
+    logger.info("mcp-finance v0.6.0 starting (easy-tdx + AKShare)")
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         await server.run(
@@ -501,6 +502,11 @@ async def main():
         )
 
 
-if __name__ == "__main__":
+def cli():
+    """sync entry point for console_scripts"""
     import asyncio
     asyncio.run(main())
+
+if __name__ == "__main__":
+    cli()
+

@@ -955,6 +955,69 @@ def get_all_a_stocks_snapshot():
 
 
 # ================================================================
+
+def get_main_inflow_batch(codes: list[str]) -> dict[str, float | None]:
+    """批量获取主力净流入（通过 easy-tdx get_stock_quotes）
+
+    Args:
+        codes: 6位股票代码列表
+
+    Returns:
+        {code: main_net_amount (元), ...}  — 查不到的 code 值为 None
+    """
+    if not codes:
+        return {}
+
+    # 代码 → 市场映射
+    def _code_to_market(c: str) -> int | None:
+        # 先根据前缀判断（AKShare 返回的代码带 "sh"/"sz"/"bj" 前缀）
+        if c.startswith("bj"):
+            return 2  # BJ
+        clean = c.replace("sh", "").replace("sz", "").replace("bj", "")
+        if clean.startswith("60") or clean.startswith("68"):
+            return 1  # SH
+        elif clean.startswith(("00", "30")):
+            return 0  # SZ
+        elif clean.startswith(("8", "4", "9")):
+            return 2  # BJ / B股
+        return None
+
+    stocks = []
+    for code in codes:
+        mkt = _code_to_market(code)
+        if mkt is not None:
+            stocks.append((mkt, code))
+
+    if not stocks:
+        return {c: None for c in codes}
+
+    result: dict[str, float | None] = {c: None for c in codes}
+
+    tdx = _get_tdx()
+    if tdx is None:
+        return result
+
+    # easy-tdx get_stock_quotes 支持批量，但不宜一次太多
+    batch_size = 50
+    for i in range(0, len(stocks), batch_size):
+        batch = stocks[i:i + batch_size]
+        try:
+            df = tdx.get_stock_quotes(batch)
+            if df is not None and not df.empty:
+                for _, row in df.iterrows():
+                    c = str(row.get("code", ""))
+                    val = row.get("main_net_amount")
+                    if c and val is not None:
+                        try:
+                            result[c] = float(val)
+                        except (ValueError, TypeError):
+                            pass
+        except Exception:
+            continue
+
+    return result
+
+# ================================================================
 # 12. 测试数据源
 # ================================================================
 
@@ -1029,11 +1092,31 @@ def handle_kline(arguments):
 def handle_financials(arguments):
     """财务数据 handler"""
     code = arguments["code"]
+    market = arguments.get("market", "a")
     count = arguments.get("count", 4)
-    data = get_financials_a(code, count=count)
-    if "error" in data:
-        raise NoDataError(f"未找到 {code} 的财务数据")
-    return data
+    if market == "a":
+        data = get_financials_a(code, count=count)
+        if "error" in data:
+            raise NoDataError(f"未找到 {code} 的财务数据")
+        return data
+    elif market in ("hk", "us"):
+        # 港股/美股: 尝试 AKShare 通用接口
+        try:
+            akshare = _get_ak()
+            if market == "hk":
+                df = _call_with_net_timeout(lambda: akshare.stock_hk_financial_indicator(symbol=code))
+            else:
+                df = _call_with_net_timeout(lambda: akshare.stock_us_financial_indicator(symbol=code))
+            if df is not None and not df.empty:
+                records = []
+                for _, row in df.head(count).iterrows():
+                    records.append({str(k): (None if pd.isna(v) else v) for k, v in row.items()})
+                return {"数据": records, "市场": market, "提示": "港股/美股财务数据来自AKShare,字段与A股不同"}
+        except Exception:
+            pass
+        raise NoDataError(f"暂不支持 {market} 市场的财务数据查询,请使用其他工具")
+    else:
+        raise NoDataError(f"暂不支持 {market} 市场的财务数据查询")
 
 
 def handle_market_indices(arguments=None):

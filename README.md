@@ -27,7 +27,7 @@ mcp-finance 给了 AI 一个**实时、结构化、可计算**的全市场数据
 - **双数据源** — easy-tdx 通达信 TCP 协议（毫秒级）+ AKShare（财务/板块等补充）
 - **技术分析** — 9 大指标纯 Python 本地计算，金叉死叉自动识别
 - **条件选股** — 全市场 A 股按涨跌幅/量比/换手率/PE/PB/市值等 11 维度筛选
-- **策略回测** — Backtrader 事件驱动引擎，5 种策略 + 参数网格优化
+- **策略回测** — Backtrader 事件驱动引擎，8 种策略 + 参数网格优化
 - **K线图表** — Plotly 交互式 HTML，蜡烛图+均线+MACD/KDJ/RSI，可缩放平移
 - **高级数据** — 龙虎榜/大宗交易/两融/北向资金全覆盖
 
@@ -37,7 +37,7 @@ mcp-finance 给了 AI 一个**实时、结构化、可计算**的全市场数据
 
 ```bash
 # PyPI 安装（推荐）
-pip install mcp-finance
+pip install mcp-markets
 
 # 或从源码安装
 git clone https://github.com/ojkkk/mcp-finance.git
@@ -122,7 +122,7 @@ codex mcp add mcp-finance -- python -m mcp_finance.server
 |------|------|------|
 | `stock_screener` | 全市场 11 维度筛选 A 股 | 至少一个条件 |
 
-支持条件：涨跌幅 / 量比 / 换手率 / 市盈率 / 市净率 / 总市值 / ROE / 股息率 / 主力净流入
+支持条件：涨跌幅 / 量比 / 换手率 / 市盈率 / 市净率 / 总市值 / ROE（AKShare财务缓存） / 主力净流入（easy-tdx） / 股息率（暂不可用）。注意：PE/市净率等字段由数据源决定，部分股票可能缺失
 
 ### 策略回测
 
@@ -131,7 +131,7 @@ codex mcp add mcp-finance -- python -m mcp_finance.server
 | `backtest_strategy` | 单策略回测 + 绩效统计 | `code` |
 | `optimize_strategy` | 参数网格优化，自动找最优参数 | `code` |
 
-支持策略：双均线交叉 / MACD金叉死叉 / RSI超买超卖 / KDJ金叉死叉 / BOLL突破
+支持策略：双均线 / MACD / RSI / KDJ / BOLL / 海龟交易 / 波动率趋势 / 均值回归
 
 ### 图表
 
@@ -203,15 +203,14 @@ mcp-finance/
     api.py                # easy-tdx + AKShare 双数据源封装
     data.py               # 230+ 股票代码名称映射
     indicators.py         # 9 大技术指标 + 信号识别
-    screener.py           # 全市场条件选股
+    screener.py           # 全市场条件选股 (含ROE缓存)
+    financials.py         # ROE财务数据缓存模块 (AKShare)
     backtest.py           # Backtrader 回测引擎 + 参数优化
     chart.py              # Plotly 交互式 K 线图
-    pybroker_strategy.py  # PyBroker ML 策略（实验性）
     errors.py             # 统一错误类型
     validators.py         # Pydantic 参数校验
     cache.py              # TTL 缓存
     logging_config.py     # 结构化日志
-    akshare_data.py       # 向后兼容 re-export 层
   tests/
     test_indicators.py    # 技术指标单元测试
     test_screener.py      # 选股器单元测试

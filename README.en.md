@@ -27,7 +27,7 @@ mcp-finance gives AI a **real-time, structured, computable** multi-market data s
 - **Dual Data Source** — easy-tdx TDX TCP protocol (millisecond) + AKShare (financials/sectors)
 - **Technical Analysis** — 9 indicators computed locally in pure Python, auto signal detection
 - **Stock Screener** — Full A-share market screening across 11 dimensions
-- **Strategy Backtesting** — Backtrader event-driven engine with 5 strategies + parameter optimization
+- **Strategy Backtesting** — Backtrader event-driven engine with 8 strategies + parameter optimization
 - **K-line Charts** — Plotly interactive HTML charts with candlestick + MA + MACD/KDJ/RSI subplots
 - **Advanced Data** — Dragon & Tiger, block trades, margin trading, north-bound flow
 
@@ -37,7 +37,7 @@ mcp-finance gives AI a **real-time, structured, computable** multi-market data s
 
 ```bash
 # PyPI (recommended)
-pip install mcp-finance
+pip install mcp-markets
 
 # Or from source
 git clone https://github.com/ojkkk/mcp-finance.git
@@ -124,7 +124,7 @@ Signals: golden/death cross, overbought/oversold, MACD bar reversal, MA alignmen
 
 Filters: gain%, volume ratio, turnover%, PE, PB, market cap
 
-> ROE/dividend%/main inflow currently unavailable (marked in schema)
+> ROE (via AKShare cache) and main inflow (via easy-tdx) are supported. Dividend% currently unavailable. PE/PB may be missing for some stocks.
 
 ### Backtesting
 
@@ -133,7 +133,7 @@ Filters: gain%, volume ratio, turnover%, PE, PB, market cap
 | `backtest_strategy` | Single strategy backtest + stats | `code` |
 | `optimize_strategy` | Grid search parameter optimization | `code` |
 
-Strategies: MA cross, MACD signal, RSI signal, KDJ signal, BOLL signal
+Strategies: MA cross, MACD signal, RSI signal, KDJ signal, BOLL signal, Turtle, Vol Trend, Mean Reversion
 
 ### Charts
 
@@ -205,15 +205,14 @@ mcp-finance/
     api.py                # easy-tdx + AKShare dual-source layer
     data.py               # 230+ stock symbol mapping
     indicators.py         # 9 indicators + signal detection
-    screener.py           # Multi-dimension stock screener
+    screener.py           # Multi-dimension stock screener (with ROE cache)
+    financials.py         # ROE financial data cache (AKShare)
     backtest.py           # Backtrader backtesting + optimization
     chart.py              # Plotly interactive K-line charts
-    pybroker_strategy.py  # PyBroker ML strategy (experimental)
     errors.py             # Unified error types
     validators.py         # Pydantic parameter validation
     cache.py              # TTL cache
     logging_config.py     # Structured logging
-    akshare_data.py       # Backward-compat re-export layer
   tests/
     test_indicators.py    # Indicator unit tests
     test_screener.py      # Screener unit tests
