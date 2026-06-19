@@ -1,58 +1,63 @@
 <h1 align="center"> mcp-finance</h1>
 <p align="center">
-  <strong>All-Market Real-time Quotes MCP Server</strong><br>
-  A-shares, HK stocks, US stocks, futures — quotes, indicators, screening, backtesting & interactive charts for AI assistants
+  <strong>All-Market Financial Data MCP Server for AI Assistants</strong><br>
+  A-shares, HK, US stocks, futures — real-time quotes, K-lines, technical indicators, screening, backtesting, alerts & interactive charts
 </p>
 
 <p align="center">
-  <a href="README.md"> 中文</a> 
-  <a href="https://github.com/ojkkk/mcp-finance">GitHub</a>
+  <a href="README.md"> 中文</a> ·
+  <a href="https://github.com/ojkkk/mcp-finance">GitHub</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/MCP-1.4+-purple?logo=modelcontextprotocol" alt="MCP 1.4+">
-  <img src="https://img.shields.io/badge/version-0.6.0-orange" alt="Version 0.6.0">
+  <img src="https://img.shields.io/badge/version-0.7.0-orange" alt="Version 0.7.0">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
   <img src="https://img.shields.io/badge/data-easy--tdx%20%2B%20AKShare-blue" alt="Dual Data Source">
 </p>
 
----
-
-## Why mcp-finance?
-
-mcp-finance gives AI a **real-time, structured, computable** multi-market data source:
-
-- **Multi-Market** — A-shares + HK stocks + US stocks + China futures in one MCP Server
-- **Dual Data Source** — easy-tdx TDX TCP protocol (millisecond) + AKShare (financials/sectors)
-- **Technical Analysis** — 9 indicators computed locally in pure Python, auto signal detection
-- **Stock Screener** — Full A-share market screening across 11 dimensions
-- **Strategy Backtesting** — Backtrader event-driven engine with 8 strategies + parameter optimization
-- **K-line Charts** — Plotly interactive HTML charts with candlestick + MA + MACD/KDJ/RSI subplots
-- **Advanced Data** — Dragon & Tiger, block trades, margin trading, north-bound flow
+> Real-time multi-market data at your AI's fingertips — A-shares, HK, US, futures, via easy-tdx (TDX TCP) + AKShare.
 
 ---
 
-## Install
+## Capability Matrix
+
+| Category | Tool | Markets |
+|----------|------|---------|
+| **Real-time Quotes** | `get_realtime_quote` | A/HK/US/Futures |
+| **K-line Data** | `get_kline` | A/HK/US/Futures (daily/weekly/monthly, adjusted) |
+| **Financials** | `get_financials` | A-shares (revenue, net profit, ROE) |
+| **Market Indices** | `get_market_indices` | A/HK/US |
+| **Sector Ranking** | `get_sector_ranking` | A-share industry/concept |
+| **Capital Flow** | `get_north_flow` | Northbound/Southbound |
+| **Stock Search** | `search_stock` | A/HK/US (local mapping, millisecond) |
+| **Batch Quotes** | `batch_quotes` | A/HK/US |
+| **Futures List** | `get_futures_list` | China futures main contracts |
+| **Technical Indicators** | `get_technical_indicators` | MA/MACD/KDJ/RSI/BOLL/WR/BIAS + signals |
+| **Stock Screener** | `stock_screener` | 11-dimension screening |
+| **Strategy Backtest** | `backtest_strategy` | Backtrader, 5 strategies + Buy & Hold |
+| **Param Optimization** | `optimize_strategy` | Grid scan (max 200 combos) |
+| **Alerts** | `set_alert` | One-shot condition check, DingTalk/WeCom |
+| **K-line Charts** | `plot_kline` | Interactive Plotly HTML |
+| **Dragon Tiger** | `get_dragon_tiger` | Daily board details |
+| **Block Trades** | `get_block_trades` | Transaction details |
+| **Margin Trading** | `get_margin_trading` | SH + SZ exchanges |
+| **ML Backtest** | `pybroker_backtest` | Experimental mean-signal backtest |
+| **Diagnostics** | `test_data_sources` | Full data source availability test |
+
+---
+
+## Quick Start
 
 ```bash
-# PyPI (recommended)
-pip install mcp-markets
-
-# Or from source
-git clone https://github.com/ojkkk/mcp-finance.git
-cd mcp-finance
-pip install -e .
+pip install mcp-finance  # or: pip install -e ".[dev]"
 ```
 
-**Requires**: Python 3.10+, easy-tdx, akshare, plotly, pandas, numpy, backtrader, pydantic, mcp
+**Core Dependencies**: `mcp` / `pydantic` / `easy-tdx` / `akshare` / `plotly` / `numpy` / `pandas` / `backtrader`
 
----
-
-## Configuration
-
-<details>
-<summary><b>Claude Desktop</b></summary>
+### Claude Desktop
 
 ```json
 {
@@ -64,119 +69,20 @@ pip install -e .
   }
 }
 ```
-</details>
 
-<details>
-<summary><b>Codex</b></summary>
-
-```bash
-codex mcp add mcp-finance -- python -m mcp_finance.server
-```
-</details>
-
-<details>
-<summary><b>Cursor / VS Code</b></summary>
+### Cursor / VS Code
 
 ```json
 {
   "mcpServers": {
     "mcp-finance": {
+      "type": "stdio",
       "command": "python",
       "args": ["-m", "mcp_finance.server"]
     }
   }
 }
 ```
-</details>
-
----
-
-## All Tools (17)
-
-### Market Data
-
-| Tool | Description | Required |
-|------|-------------|----------|
-| `get_realtime_quote` | Real-time quote (A/HK/US/Futures) | `code` |
-| `get_kline` | K-line data daily/weekly/monthly | `code` |
-| `get_financials` | A-share financials (revenue, ROE, etc.) | `code` |
-| `get_market_indices` | Market indices (A/HK/US) | — |
-| `get_sector_ranking` | A-share sector/concept rankings | — |
-| `get_north_flow` | North/South-bound fund flows | — |
-| `get_futures_list` | China futures contracts list | — |
-| `batch_quotes` | Batch query multiple stocks | `codes` |
-
-### Technical Analysis
-
-| Tool | Description | Required |
-|------|-------------|----------|
-| `get_technical_indicators` | 9 indicators + signal detection | `code` |
-
-Indicators: MA(5/10/20/60/120/250), MACD, KDJ, RSI(6/14/24), BOLL, WR, BIAS
-
-Signals: golden/death cross, overbought/oversold, MACD bar reversal, MA alignment
-
-### Stock Screener
-
-| Tool | Description | Required |
-|------|-------------|----------|
-| `stock_screener` | Multi-dimension A-share screening | >= 1 filter |
-
-Filters: gain%, volume ratio, turnover%, PE, PB, market cap
-
-> ROE (via AKShare cache) and main inflow (via easy-tdx) are supported. Dividend% currently unavailable. PE/PB may be missing for some stocks.
-
-### Backtesting
-
-| Tool | Description | Required |
-|------|-------------|----------|
-| `backtest_strategy` | Single strategy backtest + stats | `code` |
-| `optimize_strategy` | Grid search parameter optimization | `code` |
-
-Strategies: MA cross, MACD signal, RSI signal, KDJ signal, BOLL signal, Turtle, Vol Trend, Mean Reversion
-
-### Charts
-
-| Tool | Description | Required |
-|------|-------------|----------|
-| `plot_kline` | Interactive K-line HTML chart | `code` |
-
-> Generates an interactive HTML file — open in browser for zoom/pan/hover
-
-### Advanced Data
-
-| Tool | Description |
-|------|-------------|
-| `get_dragon_tiger` | Daily Dragon & Tiger board |
-| `get_block_trades` | Block trade details |
-| `get_margin_trading` | Margin trading data |
-
-### Diagnostics
-
-| Tool | Description |
-|------|-------------|
-| `test_data_sources` | Test all data source availability |
-
----
-
-## Examples
-
-| Scenario | Tell your AI |
-|----------|-------------|
-| A-share quote | "Check Moutai (600519) latest price" |
-| HK stock | "What's Tencent (00700) trading at?" |
-| US stock | "AAPL current price?" |
-| Futures | "Show me rebar futures quotes" |
-| K-line | "Get Moutai daily K-line for last 60 days" |
-| Technical | "Analyze BYD indicators, any golden cross?" |
-| Financials | "Hengrui Pharma recent revenue and ROE trend" |
-| Fund flow | "Is north-bound flow net buying this week?" |
-| Screener | "Scan A-shares: gain>3%, vol ratio>1.5, PE<50, PB<5" |
-| Backtest | "Backtest Midea with MA(5,20) in 2024 vs buy&hold" |
-| Optimize | "Find best MA params for Midea" |
-| Chart | "Plot Moutai 120-day K-line with MACD and RSI" |
-| Sectors | "Which sector is leading today?" |
-| Futures list | "List all futures contracts" |
 
 ---
 
@@ -184,10 +90,26 @@ Strategies: MA cross, MACD signal, RSI signal, KDJ signal, BOLL signal, Turtle, 
 
 | Source | Description | Coverage |
 |--------|-------------|----------|
-| **easy-tdx** | TDX TCP protocol, millisecond quotes | A/HK/US/Futures real-time quotes & K-lines |
-| **AKShare** | Open-source financial data API | Financials, Dragon & Tiger, block trades, margin, north flow |
+| **easy-tdx** | TDX TCP protocol, millisecond, no API key | A-share quotes + K-lines |
+| **AKShare (Sina)** | Open-source financial data | HK/US quotes + K-lines |
+| **AKShare (THS)** | Open-source financial data | Financials, sector rankings |
 
-easy-tdx is the primary source (millisecond latency); automatically falls back to AKShare when unavailable.
+> easy-tdx connects directly to TDX market servers (port 7709). All network calls have 15s thread-level timeout + 90s asyncio-level timeout protection.
+
+---
+
+## Examples
+
+| Use Case | Ask AI |
+|----------|--------|
+| A-share quote | "What's Moutai (600519) price?" |
+| HK quote | "How much is Tencent (00700) in HK?" |
+| US quote | "What's AAPL stock price? And NVDA?" |
+| Technical analysis | "Analyze BYD's indicators — any golden crosses?" |
+| Screening | "Screen: gain > 3%, turnover > 5%, ROE > 10%" |
+| Backtesting | "Backtest Midea (000333) with MA(5,20) vs Buy & Hold for 2024" |
+| Optimization | "Find best MA parameters for Midea" |
+| Chart | "Plot Moutai's last 120 days with MACD and RSI" |
 
 ---
 
@@ -196,40 +118,48 @@ easy-tdx is the primary source (millisecond latency); automatically falls back t
 ```
 mcp-finance/
   pyproject.toml
-  README.md              # Chinese
-  README.en.md           # English
-  LICENSE                # MIT
+  README.md               (Chinese)
+  README.en.md            (English)
+  CHANGELOG.md
+  .github/workflows/      # CI
+  run_monitor.py
   mcp_finance/
-    __init__.py           # Version
-    server.py             # MCP Server router (17 tools + resources)
-    api.py                # easy-tdx + AKShare dual-source layer
-    data.py               # 230+ stock symbol mapping
-    indicators.py         # 9 indicators + signal detection
-    screener.py           # Multi-dimension stock screener (with ROE cache)
-    financials.py         # ROE financial data cache (AKShare)
-    backtest.py           # Backtrader backtesting + optimization
-    chart.py              # Plotly interactive K-line charts
-    errors.py             # Unified error types
-    validators.py         # Pydantic parameter validation
-    cache.py              # TTL cache
-    logging_config.py     # Structured logging
+    __init__.py
+    api.py                 # easy-tdx + AKShare dual source
+    data.py                # Stock mappings & sectors
+    indicators.py          # 9 indicators + signals
+    screener.py            # 11-dimension screener
+    backtest.py            # Backtrader engine
+    pybroker_strategy.py   # Experimental ML strategy
+    monitor.py             # Alerting
+    chart.py               # Plotly charts
+    server.py              # MCP Server router
+    cache.py               # TTL cache
+    validators.py          # Pydantic validation
+    errors.py              # Error types
+    logging_config.py      # Structured logging
   tests/
-    test_indicators.py    # Indicator unit tests
-    test_screener.py      # Screener unit tests
+    test_indicators.py
+    test_screener.py
 ```
 
 ---
 
-## Credits
+## Development
 
-- [**easy-tdx**](https://github.com/handsomejustin/easy-tdx) — Open-source TDX TCP client
-- [**AKShare**](https://akshare.akfamily.xyz/) — Open-source financial data library
-- [**Backtrader**](https://www.backtrader.com/) — Event-driven backtesting framework
-- [**Plotly**](https://plotly.com/python/) — Interactive charting
-- [**MCP**](https://modelcontextprotocol.io/) — Standard AI tool-calling protocol
+```bash
+pip install -e ".[dev]"
+pytest tests/ -v
+ruff check mcp_finance/
+```
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+MIT
+
+<p align="center">
+  <a href="README.md"> 阅读中文版本</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
