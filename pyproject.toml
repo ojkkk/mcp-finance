@@ -1,6 +1,6 @@
 [project]
 name = "mcp-markets"
-version = "0.6.0"
+version = "0.6.1"
 description = "全市场金融数据 MCP Server — A股/港股/美股/期货 行情/K线/技术指标/选股/回测 基于 easy-tdx + AKShare 双数据源"
 authors = [{name = "mcp-markets", email = "mcp-finance@github.com"}]
 license = {text = "MIT"}

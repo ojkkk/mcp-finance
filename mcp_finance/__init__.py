@@ -1,3 +1,3 @@
 """mcp-markets — 全市场实时行情 MCP Server"""
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
