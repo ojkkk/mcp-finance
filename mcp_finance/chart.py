@@ -16,90 +16,30 @@ from typing import Any
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from mcp_finance.indicators import _sma, _ema, calc_kdj, calc_rsi
+
 
 def _calc_sma(values: list[float], n: int) -> list[float | None]:
-    result: list[float | None] = []
-    window: list[float] = []
-    for v in values:
-        window.append(v)
-        if len(window) > n:
-            window.pop(0)
-        if len(window) == n:
-            result.append(round(sum(window) / n, 2))
-        else:
-            result.append(None)
-    return result
+    """委托至 indicators._sma（保留原函数名保持调用兼容）"""
+    return _sma(values, n)
 
 
 def _calc_ema(values: list[float], n: int) -> list[float | None]:
-    if not values or n <= 0:
-        return [None] * len(values)
-    mult = 2.0 / (n + 1)
-    result: list[float | None] = []
-    prev = None
-    for i, v in enumerate(values):
-        if i < n - 1:
-            result.append(None)
-        elif i == n - 1:
-            sma = sum(values[:n]) / n
-            result.append(round(sma, 4))
-            prev = sma
-        else:
-            ema_val = (v - prev) * mult + prev
-            result.append(round(ema_val, 4))
-            prev = ema_val
-    return result
+    """委托至 indicators._ema"""
+    return _ema(values, n)
 
 
 def _calc_kdj_simple(
     high: list[float], low: list[float], close: list[float], n: int = 9,
 ) -> tuple[list[float | None], list[float | None], list[float | None]]:
-    k: list[float | None] = []
-    d: list[float | None] = []
-    j: list[float | None] = []
-    prev_k = 50.0
-    prev_d = 50.0
-    for i in range(len(close)):
-        if i < n - 1:
-            k.append(None)
-            d.append(None)
-            j.append(None)
-            continue
-        h = max(high[i - n + 1 : i + 1])
-        l = min(low[i - n + 1 : i + 1])
-        rng = h - l
-        rsv = (close[i] - l) / rng * 100 if rng != 0 else 50.0
-        prev_k = round(2 / 3 * prev_k + 1 / 3 * rsv, 2)
-        prev_d = round(2 / 3 * prev_d + 1 / 3 * prev_k, 2)
-        k.append(prev_k)
-        d.append(prev_d)
-        j.append(round(3 * prev_k - 2 * prev_d, 2))
-    return k, d, j
+    """委托至 indicators.calc_kdj，返回 tuple 保持调用兼容"""
+    result = calc_kdj(high, low, close, n)
+    return result["K"], result["D"], result["J"]
 
 
 def _calc_rsi_simple(close: list[float], n: int = 14) -> list[float | None]:
-    if len(close) < n + 1:
-        return [None] * len(close)
-    gains, losses = [], []
-    for i in range(1, len(close)):
-        delta = close[i] - close[i - 1]
-        gains.append(max(delta, 0))
-        losses.append(max(-delta, 0))
-    result: list[float | None] = [None]
-    avg_gain = sum(gains[:n]) / n
-    avg_loss = sum(losses[:n]) / n
-    for i in range(len(gains)):
-        if i == n - 1:
-            rs = avg_gain / avg_loss if avg_loss != 0 else 100
-            result.append(round(100 - 100 / (1 + rs), 2))
-        elif i >= n:
-            avg_gain = (avg_gain * (n - 1) + gains[i]) / n
-            avg_loss = (avg_loss * (n - 1) + losses[i]) / n
-            rs = avg_gain / avg_loss if avg_loss != 0 else 100
-            result.append(round(100 - 100 / (1 + rs), 2))
-        else:
-            result.append(None)
-    return result
+    """委托至 indicators.calc_rsi"""
+    return calc_rsi(close, n)
 
 
 def generate_kline_chart(
@@ -325,7 +265,7 @@ def generate_kline_chart(
         safe_name = stock_name.replace("/", "_").replace("\\", "_") if stock_name else "chart"
         output_path = os.path.join(chart_dir, f"{safe_name}_{ts}.html")
 
-    html = fig.to_html(include_plotlyjs="cdn", full_html=True)
+    html = fig.to_html(include_plotlyjs="embed", full_html=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 
@@ -447,7 +387,7 @@ def generate_backtest_chart(
         safe_name = stock_name.replace("/", "_").replace("\\", "_")
         output_path = os.path.join(chart_dir, f"{safe_name}_backtest_{ts}.html")
 
-    html = fig.to_html(include_plotlyjs="cdn", full_html=True)
+    html = fig.to_html(include_plotlyjs="embed", full_html=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 

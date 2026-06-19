@@ -47,7 +47,7 @@ def _fetch_all_a_stocks(page: int = 1, page_size: int = 100) -> list[dict[str, A
             "f21": item.get("流通市值"),
             "f23": item.get("市净率"),
             "f37": None,  # ROE
-            "f45": None,  # 股息率 — 暂未接入
+            "f45": None,  # 股息率 — 东方财富全市场快照字段不包含股息率，始终为 None；筛选时不会生效
             "f62": None,  # 主力净流入
         })
     return result
@@ -218,6 +218,8 @@ def screen_stocks(
     }
     if slow_skipped:
         result["_note"] = f"慢速维度(ROE/主力净流入)已跳过：候选股过多({len(candidates)}只 > {_MAX_SLOW_LOOKUPS}上限)，请缩小快速维度条件后重试"
+    if min_dividend is not None:
+        result.setdefault("_warnings", []).append("股息率(min_dividend)当前暂不可用：数据源(东方财富快照)不提供股息率字段，该参数不会生效")
 
     return result
 

@@ -30,6 +30,15 @@ class TTLCache:
         ttl = ttl if ttl is not None else self._default_ttl
         with self._lock:
             self._store[key] = (time.time() + ttl, value)
+            # 惰性清理：每次 set 时随机清理过期 key（最多 10 个避免全量扫描）
+            now = time.time()
+            cleaned = 0
+            for k, (exp, _) in list(self._store.items()):
+                if now > exp:
+                    del self._store[k]
+                    cleaned += 1
+                    if cleaned >= 10:
+                        break
 
     def clear(self) -> None:
         with self._lock:

@@ -668,6 +668,17 @@ def handle_optimize(arguments: dict[str, Any]) -> dict[str, Any]:
     metric = arguments.get("metric", "sharpe")
     fast_range = list(range(fast_min, fast_max + 1, fast_step))
     slow_range = list(range(slow_min, slow_max + 1, slow_step))
+
+    # 组合数硬上限，防止用户设置过大范围把 MCP 线程池拖死
+    MAX_COMBINATIONS = 200
+    total_combos = len(fast_range) * len(slow_range)
+    if total_combos > MAX_COMBINATIONS:
+        raise BacktestError(
+            f"参数组合数({total_combos})超过上限({MAX_COMBINATIONS})，"
+            f"请缩小范围或增大步长。当前 fast:{fast_min}-{fast_max}/{fast_step}, "
+            f"slow:{slow_min}-{slow_max}/{slow_step}"
+        )
+
     result = optimize_backtest(code=code, strategy=strategy, fast_range=fast_range, slow_range=slow_range,
                                start_date=start_date, end_date=end_date, metric=metric)
     _blogger.info("参数优化完成: %s strategy=%s", code, strategy)
