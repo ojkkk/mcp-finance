@@ -56,7 +56,7 @@ class KlineParams(StockCodeModel):
     @field_validator("ktype")
     @classmethod
     def validate_ktype(cls, v: str) -> str:
-        allowed = {"daily", "weekly", "monthly", "minute60"}
+        allowed = {"daily", "weekly", "monthly"}
         if v not in allowed:
             raise ValueError(f"ktype 必须是 {allowed} 之一")
         return v
@@ -71,6 +71,7 @@ class KlineParams(StockCodeModel):
 
 
 class FinancialsParams(StockCodeModel):
+    market: str = Field(default="a", description="市场: a/hk/us")
     count: int = Field(default=4, ge=1, le=20, description="返回期数")
 
 
@@ -116,7 +117,7 @@ class ScreenerParams(BaseModel):
     max_pb: Optional[float] = Field(default=None, ge=0)
     min_roe: Optional[float] = Field(default=None, ge=-100, le=100, description="最低净资产收益率 ROE(%) — 通过财务缓存获取")
     min_main_inflow: Optional[float] = Field(default=None, description="最低主力净流入（万元），正值表示净流入 — 通过 easy-tdx 获取")
-    min_dividend: Optional[float] = Field(default=None, ge=0, le=100, description="（暂不可用）最低股息率(%)")
+    min_dividend: Optional[float] = Field(default=None, ge=0, le=100, description="（暂不可用）最低股息率(%) — 数据源不支持，传入不生效")
     top_n: int = Field(default=50, ge=1, le=200)
 
 
