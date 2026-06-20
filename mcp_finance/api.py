@@ -27,7 +27,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 import atexit
 # ── 共享线程池 ──────────────────────────────────────────────────
 # _API_EXECUTOR: 业务请求池（行情/K线/AKShare 网络调用等）
-# _TDX_INIT_EXECUTOR: 独立池，仅用于 easy-tdx 懒加载初始化，防止 TCP 挂死污染业务池
+# _tdx_init_lock + threading.Thread: 用于 easy-tdx 懒加载初始化，防止 TCP 挂死污染业务池
 _API_EXECUTOR = ThreadPoolExecutor(max_workers=8, thread_name_prefix='mcp-finance-api')
 _tdx_init_lock = threading.Lock()
 atexit.register(lambda: _API_EXECUTOR.shutdown(wait=False))
@@ -61,7 +61,7 @@ _tdx_client = None
 def _get_tdx():
     """懒加载 easy-tdx 统一客户端（5s 超时保护，防止 TCP 挂死）
     
-    使用独立 _TDX_INIT_EXECUTOR 防止 TCP 阻塞污染业务线程池。
+    使用 threading.Thread + 5s join 超时保护，防止 TCP 阻塞污染业务线程池。
     双重检查锁防止并发重复初始化。
     """
     global _tdx_client
@@ -161,6 +161,27 @@ def _call_tdx_with_timeout(func, timeout=10):
     return result[0] if done[0] else None
 
 
+def _resample_kline(df, period, date_col="date"):
+    """将日线 DataFrame 聚合为周线或月线
+
+    Args:
+        df: 日线 DataFrame
+        period: "weekly" 或 "monthly"
+        date_col: 日期列名
+
+    Returns:
+        聚合后的 DataFrame (reset_index)
+    """
+    df[date_col] = pd.to_datetime(df[date_col])
+    df.set_index(date_col, inplace=True)
+    rule = "W" if period == "weekly" else "ME"
+    df = df.resample(rule).agg({
+        "open": "first", "high": "max", "low": "min",
+        "close": "last", "volume": "sum", "amount": "sum",
+    }).dropna().reset_index()
+    return df
+
+
 def _safe_float(val):
     if val is None: return None
     try: return round(float(val), 2)
@@ -253,9 +274,11 @@ def _get_single_quote(code, market="a"):
             future = _API_EXECUTOR.submit(_tdx_fetch)
             try:
                 tdx_result = future.result(timeout=5)
-            except (FuturesTimeoutError, Exception):
+            except (FuturesTimeoutError, Exception) as e:
+                _api_logger.warning("easy-tdx 实时行情超时或异常: %s [%s]", type(e).__name__, code)
                 pass  # 超时或异常，走策略2
-        except Exception:
+        except Exception as e:
+            _api_logger.warning("easy-tdx 实时行情 submit 异常: %s [%s]", type(e).__name__, code)
             pass  # submit 本身异常也走策略2
 
         if tdx_result is not None and not tdx_result.empty:
@@ -274,8 +297,8 @@ def _get_single_quote(code, market="a"):
                     from mcp_finance.data import STOCK_MAPPING
                     r["名称"] = STOCK_MAPPING.get(code, "")
                 return r
-        except Exception:
-            pass
+        except Exception as e:
+            _api_logger.warning("AKShare A股行情降级失败: %s [%s]", e, code)
         return None
     # ── 港股/美股：AKShare Sina _daily 接口 ──
     ak = _get_ak()
@@ -292,8 +315,8 @@ def _get_single_quote(code, market="a"):
                     r["pre_close"] = df.iloc[-2]["close"]
                 r["名称"] = r.get("名称", STOCK_MAPPING.get(code, ""))
                 return r
-    except Exception:
-        pass
+    except Exception as e:
+        _api_logger.warning("AKShare 港股/美股行情失败: %s [%s]", e, code)
 
     return None
 
@@ -363,9 +386,11 @@ def _fetch_all_a_stocks_cache():
             df = future.result(timeout=60)
         except FuturesTimeoutError:
             future.cancel()
-        except Exception:
+        except Exception as e:
+            _api_logger.warning("全市场快照 future.result 异常: %s", e)
             pass
-    except Exception:
+    except Exception as e:
+        _api_logger.warning("全市场快照 submit 异常: %s", e)
         pass
 
     if df is not None and not df.empty:
@@ -390,7 +415,7 @@ def get_realtime_quote_a(code):
                 from mcp_finance.data import STOCK_MAPPING
                 name = STOCK_MAPPING.get(code, "")
             # easy-tdx 返回的数据有 'market' 原始字段，AKShare 没有
-            data_source = "easy-tdx" if "market" in row and isinstance(row.get("market"), (int, float)) else "AKShare-K线"
+            data_source = "easy-tdx" if "market" in row and isinstance(row.get("market"), (int, float)) else "AKShare-日K(昨收)"
             result = {
                 "代码": code, "名称": name,
                 "最新价": q["最新价"], "涨跌幅": q["涨跌幅"],
@@ -402,7 +427,8 @@ def get_realtime_quote_a(code):
                 "市场": "A股", "数据源": data_source,
             }
             return result
-    except Exception:
+    except Exception as e:
+        _api_logger.warning("A股实时行情获取失败: %s [%s]", e, code)
         pass
 
     # 兜底：本地数据
@@ -420,10 +446,11 @@ def get_realtime_quote_a(code):
     return {"error": f"未找到股票 {code}，请检查代码是否正确"}
 
 
-def get_realtime_quote_hk(code):
-    """港股实时行情 — 用最近日 K 线查询"""
+def _get_realtime_quote_overseas(code: str, market: str) -> dict:
+    """港股/美股实时行情统一函数"""
+    market_label = "港股" if market == "hk" else "美股"
     try:
-        row = _get_single_quote(code, market="hk")
+        row = _get_single_quote(code, market=market)
         if row is not None:
             q = _parse_kline_row(row)
             return {
@@ -437,35 +464,21 @@ def get_realtime_quote_hk(code):
                 "最低": q["最低"],
                 "成交量": q["成交量(手)"],
                 "成交额": q["成交额(元)"],
-                "市场": "港股", "数据源": "AKShare-K线",
+                "市场": market_label, "数据源": "AKShare-K线",
             }
-        return {"error": f"未找到港股 {code}"}
+        return {"error": f"未找到{market_label} {code}"}
     except Exception as e:
-        return {"error": f"获取港股行情失败: {e}"}
+        return {"error": f"获取{market_label}行情失败: {e}"}
+
+
+def get_realtime_quote_hk(code):
+    """港股实时行情 — 用最近日 K 线查询"""
+    return _get_realtime_quote_overseas(code, market="hk")
 
 
 def get_realtime_quote_us(code):
     """美股实时行情 — 用最近日 K 线查询"""
-    try:
-        row = _get_single_quote(code, market="us")
-        if row is not None:
-            q = _parse_kline_row(row)
-            return {
-                "代码": code, "名称": row.get("名称", ""),
-                "最新价": q["最新价"],
-                "涨跌幅": q["涨跌幅"],
-                "涨跌额": q["涨跌额"],
-                "今开": q["今开"],
-                "昨收": q["昨收"],
-                "最高": q["最高"],
-                "最低": q["最低"],
-                "成交量": q["成交量(手)"],
-                "成交额": q["成交额(元)"],
-                "市场": "美股", "数据源": "AKShare-K线",
-            }
-        return {"error": f"未找到美股 {code}"}
-    except Exception as e:
-        return {"error": f"获取美股行情失败: {e}"}
+    return _get_realtime_quote_overseas(code, market="us")
 
 
 def get_realtime_quote_futures(code):
@@ -532,7 +545,8 @@ def get_kline_a(code, period="daily", adjust="qfq", limit=120):
                     "涨跌幅": _safe_float(row.get("pct_change")),
                     "换手率": _safe_float(row.get("turnover")),
                 })
-    except Exception:
+    except Exception as e:
+        _api_logger.warning("A股K线 easy-tdx 获取失败: %s [%s]", e, code)
         pass
 
     # ── 策略2: AKShare 新浪 daily ──
@@ -543,13 +557,7 @@ def get_kline_a(code, period="daily", adjust="qfq", limit=120):
             df = ak.stock_zh_a_daily(symbol=sina_code, adjust=adjust)
             if df is not None and not df.empty:
                 if period in ("weekly", "monthly"):
-                    df["date"] = pd.to_datetime(df["date"])
-                    df.set_index("date", inplace=True)
-                    rule = "W" if period == "weekly" else "ME"
-                    df = df.resample(rule).agg({
-                        "open": "first", "high": "max", "low": "min",
-                        "close": "last", "volume": "sum", "amount": "sum",
-                    }).dropna().reset_index()
+                    df = _resample_kline(df, period)
                 for _, row in df.tail(limit).iterrows():
                     records.append({
                         "日期": str(row.get("date", ""))[:10],
@@ -562,7 +570,8 @@ def get_kline_a(code, period="daily", adjust="qfq", limit=120):
                         "涨跌幅": None,
                         "换手率": None,
                     })
-        except Exception:
+        except Exception as e:
+            _api_logger.warning("A股K线 AKShare 获取失败: %s [%s]", e, code)
             pass
 
     # 如果缓存有部分数据，尝试合并新旧数据
@@ -595,13 +604,7 @@ def get_kline_hk(code, period="daily", limit=120):
         df = _call_with_net_timeout(lambda: ak.stock_hk_daily(symbol=code, adjust=""))
         if df is not None and not df.empty:
             if period in ("weekly", "monthly"):
-                df["date"] = pd.to_datetime(df["date"])
-                df.set_index("date", inplace=True)
-                rule = "W" if period == "weekly" else "ME"
-                df = df.resample(rule).agg({
-                    "open": "first", "high": "max", "low": "min",
-                    "close": "last", "volume": "sum", "amount": "sum",
-                }).dropna().reset_index()
+                df = _resample_kline(df, period)
             for _, row in df.tail(limit).iterrows():
                 records.append({
                     "日期": str(row.get("date", ""))[:10],
@@ -613,7 +616,8 @@ def get_kline_hk(code, period="daily", limit=120):
                     "成交额(元)": _safe_float(row.get("amount")),
                     "涨跌幅": None,
                 })
-    except Exception:
+    except Exception as e:
+        _api_logger.warning("港股/美股K线获取失败: %s [%s]", e, code)
         pass
 
     if records:
@@ -674,7 +678,8 @@ def get_kline_us(code, period="daily", limit=120):
                     "成交额(元)": _safe_float(row.get(amt_col)),
                     "涨跌幅": None,
                 })
-    except Exception:
+    except Exception as e:
+        _api_logger.warning("港股/美股K线获取失败: %s [%s]", e, code)
         pass
 
     if records:
@@ -792,7 +797,8 @@ def get_market_indices(market="a"):
                                 "成交量": _safe_float(row.get("成交量")),
                                 "成交额": _safe_float(row.get("成交额")),
                             })
-            except Exception:
+            except Exception as e:
+                _api_logger.warning("指数行情 AKShare 兜底获取失败: %s", e)
                 pass
     elif market == "hk":
         try:
@@ -825,7 +831,8 @@ def get_market_indices(market="a"):
                         "最低价": _safe_float(r.get("low", r.get("最低价"))),
                         "成交量": _safe_float(r.get("volume", r.get("成交量"))),
                     })
-            except Exception:
+            except Exception as e:
+                _api_logger.warning("美股指数行情获取失败: %s", e)
                 pass
     if not result:
         return [{"error": f"未获取到 {market} 市场指数数据"}]
@@ -876,7 +883,8 @@ def get_north_flow(days=5):
             if df is not None and not df.empty:
                 records = _df_to_records(df.tail(days))
                 return {"类型": "北向资金(沪深港通)", "最近天数": len(records), "数据": records, "数据源": "AKShare"}
-        except Exception:
+        except Exception as e:
+            _api_logger.warning("北向资金获取失败: %s", e)
             pass
     return {"提示": "暂无北向资金数据", "数据": []}
 
@@ -918,7 +926,8 @@ def get_batch_quotes_a(codes):
                         "成交量(手)": q["成交量(手)"],
                         "成交额(元)": q["成交额(元)"],
                     }
-            except Exception:
+            except Exception as e:
+                _api_logger.warning("批量行情单股查询失败: %s", e)
                 pass
 
     result = [result_dict[c] for c in codes if c in result_dict]
@@ -977,16 +986,18 @@ def get_margin_trading(market="all", date=None):
             try:
                 df_sh = _call_with_net_timeout(lambda: ak.stock_margin_detail_sse(date=date))
                 result["上海"] = _df_to_records(df_sh)
-                result["上证个股数"] = len(df_sh)
+                result["上证个股数"] = len(df_sh) if df_sh is not None else 0
             except Exception:
                 result["上海"] = []
+                result["上证个股数"] = 0
         if market in ("sz", "all"):
             try:
                 df_sz = _call_with_net_timeout(lambda: ak.stock_margin_detail_szse(date=date))
                 result["深圳"] = _df_to_records(df_sz)
-                result["深证个股数"] = len(df_sz)
+                result["深证个股数"] = len(df_sz) if df_sz is not None else 0
             except Exception:
                 result["深圳"] = []
+                result["深证个股数"] = 0
         return result
     except Exception as e:
         return {"error": f"获取两融数据失败: {e}"}
@@ -1070,8 +1081,10 @@ def get_main_inflow_batch(codes: list[str]) -> dict[str, float | None]:
 
     result: dict[str, float | None] = {c: None for c in codes}
 
-    tdx = _get_tdx()
-    if tdx is None:
+    try:
+        tdx = _get_tdx()
+    except Exception as e:
+        _api_logger.warning("TDX 连接失败，主力净流入不可用: %s", e)
         return result
 
     # easy-tdx get_stock_quotes 支持批量，但不宜一次太多
@@ -1089,7 +1102,8 @@ def get_main_inflow_batch(codes: list[str]) -> dict[str, float | None]:
                             result[c] = float(val)
                         except (ValueError, TypeError):
                             pass
-        except Exception:
+        except Exception as e:
+            _api_logger.warning("主力净流入批量查询失败: %s", e)
             continue
 
     return result
@@ -1261,7 +1275,8 @@ def handle_financials(arguments):
                 for _, row in df.head(count).iterrows():
                     records.append({str(k): (None if pd.isna(v) else v) for k, v in row.items()})
                 return {"数据": records, "市场": market, "提示": "港股/美股财务数据来自AKShare,字段与A股不同"}
-        except Exception:
+        except Exception as e:
+            _api_logger.warning("港股/美股财务数据获取失败: %s [%s]", e, code)
             pass
         raise NoDataError(f"暂不支持 {market} 市场的财务数据查询,请使用其他工具")
     else:

@@ -11,6 +11,12 @@ import asyncio
 import json
 import re
 
+try:
+    import numpy as np
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
+
 import mcp.server.stdio
 import mcp.types as types
 from mcp.server import NotificationOptions, Server
@@ -24,11 +30,31 @@ from mcp_finance.screener import handle_stock_screener
 from mcp_finance.backtest import handle_backtest, handle_optimize
 from mcp_finance.chart import handle_plot_kline
 from mcp_finance.data import HOT_STOCKS
-from mcp_finance.errors import StockError
+from mcp_finance.errors import StockError, format_error_response
 from mcp_finance.logging_config import get_logger, set_level
 
 logger = get_logger(__name__)
 server = Server("mcp-finance")
+
+
+# ================================================================
+# NumPy JSON encoder (module-level, avoid redefinition on each call)
+# ================================================================
+
+if _HAS_NUMPY:
+    class _NPEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, np.floating):
+                return float(obj)
+            if isinstance(obj, np.bool_):
+                return bool(obj)
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            return super().default(obj)
+else:
+    _NPEncoder = None
 
 
 # ================================================================
@@ -44,83 +70,24 @@ def _register(name: str):
     return decorator
 
 
-# -- A --
-@_register("get_realtime_quote")
-def _get_realtime_quote(args: dict) -> dict:
-    return handle_realtime_quote(args)
-
-@_register("get_kline")
-def _get_kline(args: dict) -> list:
-    return handle_kline(args)
-
-@_register("get_financials")
-def _get_financials(args: dict) -> dict:
-    return handle_financials(args)
-
-@_register("get_market_indices")
-def _get_market_indices(args: dict) -> list:
-    return handle_market_indices(args)
-
-@_register("get_sector_ranking")
-def _get_sector_ranking(args: dict) -> list:
-    return handle_sector_ranking(args)
-
-@_register("get_north_flow")
-def _get_north_flow(args: dict) -> dict:
-    return handle_north_flow(args)
-
-
-@_register("batch_quotes")
-def _batch_quotes(args: dict) -> list:
-    return handle_batch_quotes(args)
-
-# -- Tech --
-@_register("get_technical_indicators")
-def _get_technical_indicators(args: dict) -> dict:
-    return handle_technical_indicators(args)
-
-# -- Screener --
-@_register("stock_screener")
-def _stock_screener(args: dict) -> dict:
-    return handle_stock_screener(args)
-
-# -- Backtest --
-@_register("backtest_strategy")
-def _backtest_strategy(args: dict) -> dict:
-    return handle_backtest(args)
-
-@_register("optimize_strategy")
-def _optimize_strategy(args: dict) -> dict:
-    return handle_optimize(args)
-
-
-# -- Chart --
-@_register("plot_kline")
-def _plot_kline(args: dict) -> dict:
-    return handle_plot_kline(args)
-
-# -- Advanced Data --
-@_register("get_dragon_tiger")
-def _get_dragon_tiger(args: dict) -> dict:
-    return handle_dragon_tiger(args)
-
-@_register("get_block_trades")
-def _get_block_trades(args: dict) -> dict:
-    return handle_block_trades(args)
-
-@_register("get_margin_trading")
-def _get_margin_trading(args: dict) -> dict:
-    return handle_margin_trading(args)
-
-# -- Futures --
-@_register("get_futures_list")
-def _get_futures_list(args: dict) -> list:
-    return handle_futures_list(args)
-
-# -- Diagnostics --
-@_register("test_data_sources")
-def _test_data_sources(_args: dict) -> dict:
-    return handle_test_data_sources()
+# Direct handler registrations (thin wrappers eliminated)
+TOOL_HANDLERS["get_realtime_quote"] = handle_realtime_quote
+TOOL_HANDLERS["get_kline"] = handle_kline
+TOOL_HANDLERS["get_financials"] = handle_financials
+TOOL_HANDLERS["get_market_indices"] = handle_market_indices
+TOOL_HANDLERS["get_sector_ranking"] = handle_sector_ranking
+TOOL_HANDLERS["get_north_flow"] = handle_north_flow
+TOOL_HANDLERS["batch_quotes"] = handle_batch_quotes
+TOOL_HANDLERS["get_technical_indicators"] = handle_technical_indicators
+TOOL_HANDLERS["stock_screener"] = handle_stock_screener
+TOOL_HANDLERS["backtest_strategy"] = handle_backtest
+TOOL_HANDLERS["optimize_strategy"] = handle_optimize
+TOOL_HANDLERS["plot_kline"] = handle_plot_kline
+TOOL_HANDLERS["get_dragon_tiger"] = handle_dragon_tiger
+TOOL_HANDLERS["get_block_trades"] = handle_block_trades
+TOOL_HANDLERS["get_margin_trading"] = handle_margin_trading
+TOOL_HANDLERS["get_futures_list"] = handle_futures_list
+TOOL_HANDLERS["test_data_sources"] = handle_test_data_sources
 
 
 # -- Search (纯本地，无网络) --
@@ -175,7 +142,7 @@ async def read_resource(uri: str) -> str:
             result = handle_realtime_quote({"code": code})
             return json.dumps(result, ensure_ascii=False, indent=2)
         except Exception as e:
-            raise ValueError(f"Stock not found: {code}")
+            raise ValueError(f"Stock not found: {code}") from e
 
     m = re.match(r"stock://(\w+)/kline", uri)
     if m:
@@ -184,7 +151,7 @@ async def read_resource(uri: str) -> str:
             klines = handle_kline({"code": code, "ktype": "daily", "limit": 30})
             return json.dumps(klines, ensure_ascii=False, indent=2)
         except Exception as e:
-            raise ValueError(f"K-line not found: {code}")
+            raise ValueError(f"K-line not found: {code}") from e
 
     m = re.match(r"stock://(\w+)/indicators", uri)
     if m:
@@ -193,7 +160,7 @@ async def read_resource(uri: str) -> str:
             result = handle_technical_indicators({"code": code, "days": 120})
             return json.dumps(result, ensure_ascii=False, indent=2)
         except Exception as e:
-            raise ValueError(f"Indicators not found: {code}")
+            raise ValueError(f"Indicators not found: {code}") from e
 
     raise ValueError(f"Unknown resource URI: {uri}")
 
@@ -516,9 +483,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
         }))]
     except StockError as e:
         logger.warning("Tool %s error: %s", name, e.message)
-        return [types.TextContent(type="text", text=_format_json({
-            "error": True, "code": e.code, "message": e.message,
-        }))]
+        return [types.TextContent(type="text", text=_format_json(format_error_response(e)))]
     except Exception as e:
         logger.exception("Tool %s unexpected error", name)
         return [types.TextContent(type="text", text=_format_json({
@@ -532,24 +497,10 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
 
 def _format_json(data: Any) -> str:
     """格式化 JSON 输出（兼容 numpy 类型）"""
-    try:
-        import numpy as np
-
-        class _NPEncoder(json.JSONEncoder):
-            def default(self, obj):
-                if isinstance(obj, np.integer):
-                    return int(obj)
-                if isinstance(obj, np.floating):
-                    return float(obj)
-                if isinstance(obj, np.bool_):
-                    return bool(obj)
-                if isinstance(obj, np.ndarray):
-                    return obj.tolist()
-                return super().default(obj)
-
-        return json.dumps(data, ensure_ascii=False, indent=2, cls=_NPEncoder)
-    except ImportError:
-        return json.dumps(data, ensure_ascii=False, indent=2)
+    kwargs = {"ensure_ascii": False, "indent": 2}
+    if _NPEncoder is not None:
+        kwargs["cls"] = _NPEncoder
+    return json.dumps(data, **kwargs)
 
 
 # ================================================================

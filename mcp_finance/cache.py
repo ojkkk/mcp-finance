@@ -6,6 +6,8 @@ import threading
 from functools import wraps
 from typing import Any, Callable
 
+_SENTINEL = object()
+
 
 class TTLCache:
     """带 TTL 的线程安全内存缓存"""
@@ -15,15 +17,15 @@ class TTLCache:
         self._store: dict[str, tuple[float, Any]] = {}
         self._lock = threading.Lock()
 
-    def get(self, key: str) -> Any | None:
+    def get(self, key: str, default: Any | None = None) -> Any | None:
         with self._lock:
             entry = self._store.get(key)
             if entry is None:
-                return None
+                return default
             expiry, value = entry
             if time.time() > expiry:
                 del self._store[key]
-                return None
+                return default
             return value
 
     def set(self, key: str, value: Any, ttl: float | None = None) -> None:
@@ -73,8 +75,8 @@ def cached(ttl: float = 60.0, key_fn: Callable[..., str] | None = None):
             else:
                 cache_key = f"{func.__module__}.{func.__qualname__}:{args}:{sorted(kwargs.items(), key=lambda x: str(x[0]))}"
 
-            result = cache.get(cache_key)
-            if result is not None:
+            result = cache.get(cache_key, default=_SENTINEL)
+            if result is not _SENTINEL:
                 return result
 
             result = func(*args, **kwargs)

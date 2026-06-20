@@ -13,6 +13,7 @@ import backtrader as bt
 import pandas as pd
 import numpy as np
 from mcp_finance.api import get_kline_a
+from mcp_finance.errors import BacktestError
 
 # ============================================================================
 # 费率常量
@@ -342,6 +343,7 @@ def _run_single_backtest(
     start_date: str | None = None, end_date: str | None = None,
     initial_capital: float = 100000.0,
     benchmark_code: str | None = "000300",
+    klines: list | None = None,
 ) -> dict[str, Any]:
     """运行单次A股回测(一次Cerebro, Observer记录权益曲线)"""
 
@@ -350,8 +352,9 @@ def _run_single_backtest(
     if start_date is None:
         start_date = (datetime.now() - timedelta(days=730)).strftime("%Y-%m-%d")
 
-    # 获取K线
-    klines = get_kline_a(code, period="daily", adjust="qfq", limit=800)
+    # 获取K线（支持预取数据避免重复IO）
+    if klines is None:
+        klines = get_kline_a(code, period="daily", adjust="qfq", limit=800)
     if klines and isinstance(klines[0], dict) and "error" in klines[0]:
         return {"error": klines[0]["error"]}
     if not klines: return {"error": f"获取{code} K线数据失败"}
@@ -586,13 +589,22 @@ def optimize_backtest(code: str, strategy: str = "ma_cross",
     """网格搜索参数优化(含过拟合警告)"""
     if fast_range is None: fast_range = list(range(5, 25, 5))
     if slow_range is None: slow_range = list(range(20, 60, 10))
+
+    # 预取 K 线数据，避免每个参数组合重复 IO
+    try:
+        pre_fetched_klines = get_kline_a(code, period="daily", adjust="qfq", limit=800)
+        if pre_fetched_klines and isinstance(pre_fetched_klines[0], dict) and "error" in pre_fetched_klines[0]:
+            pre_fetched_klines = None
+    except Exception:
+        pre_fetched_klines = None
+
     results_list, best, best_val = [], None, -999999.0
     for fast in fast_range:
         for slow in slow_range:
             if slow <= fast: continue
             r = _run_single_backtest(code=code, strategy=strategy, fast_period=fast, slow_period=slow,
                                     start_date=start_date, end_date=end_date,
-                                    benchmark_code=benchmark_index)
+                                    benchmark_code=benchmark_index, klines=pre_fetched_klines)
             if "error" in r: continue
             metric_map = {"sharpe": r.get("夏普比率", 0), "return": r.get("总收益率(%)", 0),
                           "mdd": -abs(r.get("最大回撤(%)", 0)), "win_rate": r.get("胜率(%)", 0),
@@ -623,7 +635,6 @@ def optimize_backtest(code: str, strategy: str = "ma_cross",
 # MCP Tool Handlers
 # ============================================================================
 
-from mcp_finance.errors import BacktestError
 from mcp_finance.logging_config import get_logger
 _blogger = get_logger(__name__)
 

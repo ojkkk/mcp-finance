@@ -23,7 +23,7 @@ from mcp_finance.financials import preload_financials
 _MAX_SLOW_LOOKUPS = 150
 
 
-def _fetch_all_a_stocks(page: int = 1, page_size: int = 100) -> list[dict[str, Any]]:
+def _fetch_all_a_stocks() -> list[dict[str, Any]]:
     """获取全市场 A 股行情数据"""
     data = get_all_a_stocks_snapshot()
     if not data:

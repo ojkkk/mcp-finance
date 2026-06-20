@@ -19,7 +19,7 @@ class DataSourceError(StockError):
 class InvalidCodeError(StockError):
     """无效的股票代码或名称"""
     def __init__(self, code: str):
-        self.code_str = code
+        self.stock_code = code
         super().__init__(f"未找到股票: {code}", code="INVALID_CODE")
 
 
@@ -35,10 +35,27 @@ class BacktestError(StockError):
         super().__init__(message, code="BACKTEST_ERROR")
 
 
+class RateLimitError(StockError):
+    """API 请求频率超限"""
+    def __init__(self, message: str = "API 请求频率超限"):
+        super().__init__(message, code="RATE_LIMIT")
+
+
+class MarketClosedError(StockError):
+    """当前非交易时间"""
+    def __init__(self, message: str = "当前非交易时间"):
+        super().__init__(message, code="MARKET_CLOSED")
+
+
+class ParameterError(StockError):
+    """参数校验错误"""
+    def __init__(self, message: str):
+        super().__init__(message, code="PARAMETER_ERROR")
+
+
 def format_error_response(error: StockError) -> dict:
     """将 StockError 格式化为统一的 JSON 响应"""
-    return {
-        "error": True,
-        "code": error.code,
-        "message": error.message,
-    }
+    resp = {"error": True, "code": error.code, "message": error.message}
+    if isinstance(error, DataSourceError) and error.source:
+        resp["source"] = error.source
+    return resp

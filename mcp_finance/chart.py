@@ -19,27 +19,6 @@ from plotly.subplots import make_subplots
 from mcp_finance.indicators import _sma, _ema, calc_kdj, calc_rsi
 
 
-def _calc_sma(values: list[float], n: int) -> list[float | None]:
-    """委托至 indicators._sma（保留原函数名保持调用兼容）"""
-    return _sma(values, n)
-
-
-def _calc_ema(values: list[float], n: int) -> list[float | None]:
-    """委托至 indicators._ema"""
-    return _ema(values, n)
-
-
-def _calc_kdj_simple(
-    high: list[float], low: list[float], close: list[float], n: int = 9,
-) -> tuple[list[float | None], list[float | None], list[float | None]]:
-    """委托至 indicators.calc_kdj，返回 tuple 保持调用兼容"""
-    result = calc_kdj(high, low, close, n)
-    return result["K"], result["D"], result["J"]
-
-
-def _calc_rsi_simple(close: list[float], n: int = 14) -> list[float | None]:
-    """委托至 indicators.calc_rsi"""
-    return calc_rsi(close, n)
 
 
 def generate_kline_chart(
@@ -58,7 +37,7 @@ def generate_kline_chart(
     Args:
         kline_data:   get_kline() 返回的 K 线列表
         stock_name:   股票名称
-        indicators:   compute_all_indicators() 的结果（可选）
+        indicators:   compute_all_indicators() 的结果（包含 snapshot/signals 等）
         show_volume:  是否显示成交量副图
         show_macd:    是否显示 MACD 副图
         show_kdj:     是否显示 KDJ 副图
@@ -77,6 +56,9 @@ def generate_kline_chart(
     lows = [float(k["最低价"]) for k in kline_data]
     closes = [float(k["收盘价"]) for k in kline_data]
     volumes = [float(k.get("成交量(手)", 0) or 0) for k in kline_data]
+
+    # 如果调用方未传入预计算指标，则内部计算
+    _ind = indicators if indicators is not None else {}
 
     # ── 计算副图行数及位置 ──
     subplot_rows = 1
@@ -134,7 +116,7 @@ def generate_kline_chart(
         ("MA60", 60, "#4CAF50"),
     ]:
         if len(closes) >= period:
-            ma_vals = _calc_sma(closes, period)
+            ma_vals = _sma(closes, period)
             fig.add_trace(go.Scatter(
                 x=dates, y=ma_vals,
                 mode="lines", name=label,
@@ -161,7 +143,7 @@ def generate_kline_chart(
     # MACD
     # ═══════════════════════════════════════════
     if show_macd and row_macd:
-        dif = _calc_ema(closes, 12)
+        dif = _ema(closes, 12)
         dea = _calc_ema(closes, 26)
         macd_dif: list[float | None] = []
         for i in range(len(closes)):
@@ -170,7 +152,7 @@ def generate_kline_chart(
             else:
                 macd_dif.append(None)
         dif_clean = [x if x is not None else 0.0 for x in macd_dif]
-        dea_list = _calc_ema(dif_clean, 9)
+        dea_list = _ema(dif_clean, 9)
         macd_dea: list[float | None] = []
         macd_bar: list[float | None] = []
         for i in range(len(macd_dif)):
@@ -204,7 +186,8 @@ def generate_kline_chart(
     # KDJ
     # ═══════════════════════════════════════════
     if show_kdj and row_kdj:
-        kdj_k, kdj_d, kdj_j = _calc_kdj_simple(highs, lows, closes)
+        kdj_result = calc_kdj(highs, lows, closes)
+        kdj_k, kdj_d, kdj_j = kdj_result["K"], kdj_result["D"], kdj_result["J"]
         fig.add_trace(go.Scatter(
             x=dates, y=kdj_k, name="K",
             line=dict(color="#FF9800", width=1.2),
@@ -225,8 +208,8 @@ def generate_kline_chart(
     # RSI
     # ═══════════════════════════════════════════
     if show_rsi and row_rsi:
-        rsi6 = _calc_rsi_simple(closes, 6)
-        rsi14 = _calc_rsi_simple(closes, 14)
+        rsi6 = calc_rsi(closes, 6)
+        rsi14 = calc_rsi(closes, 14)
         fig.add_trace(go.Scatter(
             x=dates, y=rsi6, name="RSI6",
             line=dict(color="#FF9800", width=1),

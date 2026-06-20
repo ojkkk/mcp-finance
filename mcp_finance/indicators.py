@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 from typing import Any
+from collections import deque
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -24,11 +25,9 @@ from typing import Any
 def _sma(values: list[float], n: int) -> list[float | None]:
     """简单移动平均 (SMA)，前 n-1 项为 None"""
     result: list[float | None] = []
-    window: list[float] = []
+    window: deque[float] = deque(maxlen=n)
     for v in values:
         window.append(v)
-        if len(window) > n:
-            window.pop(0)
         if len(window) == n:
             result.append(round(sum(window) / n, 4))
         else:
@@ -454,7 +453,6 @@ _ilogger = get_logger(__name__)
 
 def handle_technical_indicators(arguments: dict[str, Any]) -> dict[str, Any]:
     """计算技术指标 + 信号识别"""
-    from typing import Any
     from mcp_finance.api import get_kline_a
     from mcp_finance.data import STOCK_MAPPING
 
