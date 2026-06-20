@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 import asyncio
 import json
+import os
 import re
 
 try:
@@ -473,7 +474,19 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
 
     try:
         # 在 asyncio.to_thread 中执行同步 handler，不阻塞事件循环
-        result = await asyncio.wait_for(asyncio.to_thread(handler, arguments), timeout=90.0)
+        # 临时重定向 stdout → devnull，防止 akshare/easy-tdx 的 print 输出
+        # 污染 MCP JSON-RPC 通信通道（MCP 走 stdio，stdout 只应输出 JSON-RPC）
+        def _safe_handler():
+            import sys
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = open(os.devnull, "w", encoding="utf-8")
+                return handler(arguments)
+            finally:
+                sys.stdout.close()
+                sys.stdout = old_stdout
+
+        result = await asyncio.wait_for(asyncio.to_thread(_safe_handler), timeout=90.0)
         return [types.TextContent(type="text", text=_format_json(result))]
     except asyncio.TimeoutError:
         logger.error("Tool %s timed out (90s) — thread pool may be exhausted", name)
@@ -509,6 +522,25 @@ def _format_json(data: Any) -> str:
 
 async def main():
     logger.info("mcp-finance v%s starting (easy-tdx + AKShare)", __version__)
+
+    # ── 启动预热：后台预初始化 TDX 连接和 AKShare 数据 ──
+    async def _warmup():
+        try:
+            from mcp_finance.api import _get_tdx
+            tdx = await asyncio.to_thread(_get_tdx)
+            if tdx:
+                logger.info("预热: easy-tdx 连接成功")
+        except Exception as e:
+            logger.warning("预热: easy-tdx 初始化跳过 (%s)", e)
+        try:
+            from mcp_finance.api import _get_ak
+            ak = _get_ak()
+            logger.info("预热: AKShare 模块加载成功")
+        except Exception as e:
+            logger.warning("预热: AKShare 加载跳过 (%s)", e)
+        logger.info("mcp-finance 预热完成，可以处理请求")
+
+    asyncio.create_task(_warmup())
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         await server.run(
