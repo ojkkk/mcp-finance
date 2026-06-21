@@ -1,7 +1,7 @@
 [project]
 name = "mcp-markets"
-version = "0.7.0"
-description = "全市场金融数据 MCP Server — A股/港股/美股/期货 行情/K线/技术指标/选股/回测 基于 easy-tdx + AKShare 双数据源"
+version = "0.8.0"
+description = "全市场金融数据 MCP Server — A股/港股/美股/期货 行情/K线/技术指标/选股/回测 基于 easy-tdx + AKShare + yfinance 三数据源"
 authors = [{name = "mcp-markets", email = "mcp-finance@github.com"}]
 license = {text = "MIT"}
 readme = "README.md"
@@ -19,7 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Office/Business :: Financial :: Investment"
 ]
-keywords = ["mcp", "stock", "finance", "a-share", "hk-stock", "us-stock", "futures", "backtest", "technical-analysis", "akshare", "easy-tdx", "backtrader"]
+keywords = ["mcp", "stock", "finance", "a-share", "hk-stock", "us-stock", "futures", "backtest", "technical-analysis", "akshare", "easy-tdx", "yfinance", "backtrader"]
 
 dependencies = [
     "mcp>=1.4.1",
@@ -29,6 +29,7 @@ dependencies = [
     "pandas>=2.0",
     "easy-tdx>=1.14",
     "akshare>=1.18",
+    "yfinance>=0.2.0",
     "backtrader>=1.9",
 ]
 

@@ -3,50 +3,22 @@
 
 数据来源: AKShare stock_financial_abstract
 缓存策略: TTL 24小时，首次访问时按需拉取单只股票，后续从缓存读取
-并发: 缓存读写锁，网络请求在锁外执行，避免阻塞并发读取
+并发: DiskCacheStore 内部有文件级锁，网络请求在锁外执行
 """
 
 from __future__ import annotations
-import json, os, time, threading
+import os
+import time
 from typing import Any
 
-_CACHE_DIR = os.path.join(os.path.dirname(__file__), ".financial_cache")
+from mcp_finance.cache import CacheManager
+
 _CACHE_TTL = 86400  # 24 小时
-_cache_lock = threading.Lock()
 
-
-def _ensure_cache_dir():
-    os.makedirs(_CACHE_DIR, exist_ok=True)
-
-
-def _cache_path(code: str) -> str:
-    return os.path.join(_CACHE_DIR, f"{code}.json")
-
-
-def _read_cache(code: str) -> dict[str, Any] | None:
-    """读取缓存（带锁），有效则返回，否则返回 None"""
-    path = _cache_path(code)
-    with _cache_lock:
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    cached = json.load(f)
-                if time.time() - cached.get("_ts", 0) < _CACHE_TTL:
-                    return cached
-            except (json.JSONDecodeError, KeyError):
-                pass
-    return None
-
-
-def _write_cache(code: str, data: dict[str, Any]):
-    """写入缓存（带锁）"""
-    path = _cache_path(code)
-    with _cache_lock:
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False)
-        except OSError:
-            pass
+_fin_cache = CacheManager(
+    disk_dir=os.path.join(os.path.dirname(__file__), ".financial_cache"),
+    disk_ttl=_CACHE_TTL,
+)
 
 
 def get_financial_indicators(code: str) -> dict[str, Any]:
@@ -54,20 +26,11 @@ def get_financial_indicators(code: str) -> dict[str, Any]:
 
     返回: {"roe": float|None, "_ts": float, ...}
     """
-    _ensure_cache_dir()
-
-    # 先读缓存（锁内操作很快）
-    cached = _read_cache(code)
-    if cached is not None:
-        return cached
-
-    # 缓存未命中 — 从 AKShare 拉取（锁外，不阻塞其他线程读缓存）
-    result = _fetch_from_akshare(code)
-
-    # 写入缓存
-    _write_cache(code, result)
-
-    return result
+    return _fin_cache.get_or_fetch(
+        f"fin:{code}",
+        lambda: _fetch_from_akshare(code),
+        layer="disk",
+    )
 
 
 def _fetch_from_akshare(code: str) -> dict[str, Any]:
@@ -127,7 +90,6 @@ def preload_financials(codes: list[str], max_workers: int = 4) -> dict[str, dict
 
 
 def clear_cache():
-    """清空所有缓存"""
-    import shutil
-    if os.path.exists(_CACHE_DIR):
-        shutil.rmtree(_CACHE_DIR)
+    """清空所有财务缓存"""
+    if _fin_cache.disk is not None:
+        _fin_cache.disk.clear()

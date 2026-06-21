@@ -202,7 +202,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="get_financials",
-            description="获取股票核心财务数据（营收、净利润、ROE 等）。支持 A 股 (a) / 港股 (hk) / 美股 (us)，默认 a",
+            description="获取股票核心财务数据（营收、净利润、ROE 等）。支持 A 股 (a) / 港股 (hk) / 美股 (us)，默认 a。港美股使用 yfinance 兜底",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -298,11 +298,11 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="backtest_strategy",
-            description="策略回测：对指定股票跑历史策略回测，返回收益率、夏普比率、最大回撤、交易记录等绩效统计",
+            description="策略回测：对指定股票跑历史策略回测，返回收益率、夏普比率、最大回撤、交易记录等绩效统计。支持 A 股(6位代码)/港股(5位代码)/美股(字母代码)，自动识别市场",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "code": {"type": "string", "description": "6位股票代码，如 '600519'"},
+                    "code": {"type": "string", "description": "股票代码，如 '600519'(A股) / '00700'(港股) / 'AAPL'(美股)"},
                     "strategy": {"type": "string", "description": "策略名称: ma_cross=双均线 macd_signal=MACD rsi_signal=RSI kdj_signal=KDJ boll_signal=BOLL turtle=海龟 vol_trend=波动率趋势 mean_rev=均值回归"},
                     "fast_period": {"type": "integer", "description": "快线周期: 均线策略用(MA周期), MACD策略用(fast周期)"},
                     "slow_period": {"type": "integer", "description": "慢线周期: 均线策略用(MA周期), MACD策略用(slow周期)"},
@@ -316,11 +316,11 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="optimize_strategy",
-            description="参数优化：网格扫描策略参数组合，自动找出最优参数（基于 Backtrader 事件驱动引擎）。注意：总组合数上限 200 组",
+            description="参数优化：网格扫描策略参数组合，自动找出最优参数（基于 Backtrader 事件驱动引擎）。支持 A 股(6位代码)/港股(5位代码)/美股(字母代码)。注意：总组合数上限 200 组",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "code": {"type": "string", "description": "6位股票代码，如 '000333'"},
+                    "code": {"type": "string", "description": "股票代码，如 '000333'(A股) / '00700'(港股) / 'AAPL'(美股)"},
                     "strategy": {"type": "string", "description": "策略: ma_cross=双均线, macd_signal=MACD, rsi_signal=RSI, kdj_signal=KDJ, boll_signal=BOLL"},
                     "fast_min": {"type": "integer", "description": "快线最小值"},
                     "fast_max": {"type": "integer", "description": "快线最大值"},
@@ -486,13 +486,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 sys.stdout.close()
                 sys.stdout = old_stdout
 
-        result = await asyncio.wait_for(asyncio.to_thread(_safe_handler), timeout=90.0)
+        # optimize_strategy 需要更长时间
+        timeout = 180.0 if name == "optimize_strategy" else 90.0
+        result = await asyncio.wait_for(asyncio.to_thread(_safe_handler), timeout=timeout)
         return [types.TextContent(type="text", text=_format_json(result))]
     except asyncio.TimeoutError:
-        logger.error("Tool %s timed out (90s) — thread pool may be exhausted", name)
+        logger.error("Tool %s timed out (%.0fs) — thread pool may be exhausted", name, timeout)
         return [types.TextContent(type="text", text=_format_json({
             "error": True, "code": "TIMEOUT",
-            "message": "工具调用超时 (90s)。可能是网络请求阻塞或线程池耗尽，请稍后重试",
+            "message": f"工具调用超时 ({int(timeout)}s)。可能是网络请求阻塞或线程池耗尽，请稍后重试",
         }))]
     except StockError as e:
         logger.warning("Tool %s error: %s", name, e.message)

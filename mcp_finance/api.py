@@ -1,22 +1,23 @@
 """
-双数据源封装层：easy-tdx (主) + AKShare (辅)
+三数据源封装层：easy-tdx (主) + AKShare (辅) + yfinance (兜底)
 
 全市场数据源：A股 / 期货 / 港股 / 美股 / 指数 / 板块 / 资金流向
 - easy-tdx (通达信TCP协议): 毫秒级A股实时行情+K线，日均线/周/月
 - AKShare (新浪/同花顺): 港股、美股、财务数据、板块排行、龙虎榜等
+- yfinance (Yahoo Finance): 港股/美股 K线+行情兜底（AKShare 失败时降级）
 
 设计原则：
   - A股实时行情/K线优先走 easy-tdx（毫秒级，无超时风险）
-  - 港股/美股走 AKShare 新浪 daily 接口
+  - 港股/美股走 AKShare 新浪 daily 接口 → yfinance 兜底
   - 财务/板块/龙虎榜走 AKShare 同花顺/新浪源
   - 全市场快照用 easy-tdx get_stock_quotes_list（秒级）或 AKShare 新浪
-  - 所有接口都有 try/except 兜底
+  - 所有接口都有 try/except 兜底，确保不崩溃
 """
 
 from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
-import os, json, threading
+import os, threading
 import pandas as pd
 
 from mcp_finance.logging_config import get_logger as _get_logger
@@ -142,6 +143,36 @@ def _get_ak():
     except ImportError:
         raise ImportError("akshare 未安装，请运行: pip install akshare")
 
+def _get_yf():
+    """懒加载 yfinance"""
+    try:
+        import yfinance as yf
+        return yf
+    except ImportError:
+        raise ImportError("yfinance 未安装，请运行: pip install yfinance")
+
+
+def _lookup_name(code: str, market: str = "a") -> str:
+    """多数据源名称查找：STOCK_MAPPING → HOT_STOCKS → yfinance info"""
+    from mcp_finance.data import STOCK_MAPPING, HOT_STOCKS
+    name = STOCK_MAPPING.get(code, "")
+    if name:
+        return name
+    for s in HOT_STOCKS:
+        if s["代码"] == code:
+            return s["名称"]
+    # yfinance 兜底
+    try:
+        yf = _get_yf()
+        ticker = yf.Ticker(code)
+        info = ticker.info
+        name = info.get("longName") or info.get("shortName") or ""
+        if name:
+            return name
+    except Exception:
+        pass
+    return ""
+
 
 # ── easy-tdx 调用超时工具 ─────────────────────────────────────────
 def _call_tdx_with_timeout(func, timeout=10):
@@ -206,54 +237,12 @@ def _df_to_records(df, limit=None):
     return cleaned
 
 
-# ── 缓存工具（兼容旧的 K 线磁盘缓存）─────────────────────────────
-_KLINE_DISK_CACHE_DIR = os.path.join(os.path.dirname(__file__), ".kline_cache")
-_kline_lock = threading.Lock()
-
-
-def _kline_cache_path(code: str, period: str, adjust: str) -> str:
-    os.makedirs(_KLINE_DISK_CACHE_DIR, exist_ok=True)
-    return os.path.join(_KLINE_DISK_CACHE_DIR, f"{code}_{period}_{adjust}.json")
-
-
-def _kline_from_cache(code: str, period: str, adjust: str, max_age_hours: int = 6) -> list | None:
-    """从磁盘缓存读 K 线，6 小时内的缓存有效"""
-    import time as _time
-    path = _kline_cache_path(code, period, adjust)
-    with _kline_lock:
-        if os.path.exists(path):
-            age = _time.time() - os.path.getmtime(path)
-            if age < max_age_hours * 3600:
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        return json.load(f)
-                except (json.JSONDecodeError, OSError):
-                    pass  # 损坏的缓存文件，忽略
-    return None
-
-
-def _kline_to_cache(code: str, period: str, adjust: str, data: list):
-    path = _kline_cache_path(code, period, adjust)
-    with _kline_lock:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-
-
-def _cleanup_kline_cache(max_age_hours: int = 6):
-    """清理过期的 K 线缓存文件"""
-    import time as _time
-    if not os.path.exists(_KLINE_DISK_CACHE_DIR):
-        return
-    now = _time.time()
-    for fname in os.listdir(_KLINE_DISK_CACHE_DIR):
-        fpath = os.path.join(_KLINE_DISK_CACHE_DIR, fname)
-        try:
-            if now - os.path.getmtime(fpath) > max_age_hours * 3600:
-                os.remove(fpath)
-        except OSError:
-            pass
-
-atexit.register(_cleanup_kline_cache)
+# ── 统一磁盘缓存（K线）─────────────────────────────────────
+from mcp_finance.cache import CacheManager
+_kline_cache = CacheManager(
+    disk_dir=os.path.join(os.path.dirname(__file__), ".kline_cache"),
+    disk_ttl=21600,  # 6 小时
+)
 
 # ================================================================
 # 0. 实时行情 — 单股查询（不拉全市场）
@@ -310,13 +299,40 @@ def _get_single_quote(code, market="a"):
             df = fn()
             if df is not None and not df.empty:
                 r = df.iloc[-1].to_dict()
-                from mcp_finance.data import STOCK_MAPPING
+                from mcp_finance.data import STOCK_MAPPING, HOT_STOCKS
                 if len(df) >= 2:
                     r["pre_close"] = df.iloc[-2]["close"]
-                r["名称"] = r.get("名称", STOCK_MAPPING.get(code, ""))
+                # 先查 STOCK_MAPPING (A股)，再查 HOT_STOCKS (港股/美股)
+                name = STOCK_MAPPING.get(code, "")
+                if not name:
+                    for s in HOT_STOCKS:
+                        if s["代码"] == code:
+                            name = s["名称"]
+                            break
+                r["名称"] = r.get("名称", name)
                 return r
     except Exception as e:
         _api_logger.warning("AKShare 港股/美股行情失败: %s [%s]", e, code)
+
+    # ── 策略3: yfinance 兜底（港股/美股） ──
+    try:
+        yf = _get_yf()
+        ticker = yf.Ticker(code)
+        df = ticker.history(period="5d")
+        if df is not None and not df.empty:
+            r = df.iloc[-1].to_dict()
+            # yfinance 返回的列与 AKShare 不同，映射一下
+            r["close"] = r.get("Close")
+            r["open"] = r.get("Open")
+            r["high"] = r.get("High")
+            r["low"] = r.get("Low")
+            r["volume"] = r.get("Volume")
+            if len(df) >= 2:
+                r["pre_close"] = df.iloc[-2]["Close"]
+            r["名称"] = _lookup_name(code, market)
+            return r
+    except Exception as e:
+        _api_logger.warning("yfinance 港股/美股行情降级失败: %s [%s]", e, code)
 
     return None
 
@@ -513,7 +529,7 @@ def get_realtime_quote_futures(code):
 
 def get_kline_a(code, period="daily", adjust="qfq", limit=120):
     """A股 K线 — easy-tdx 优先（毫秒级），AKShare 新浪兜底，带磁盘缓存 6h"""
-    cached = _kline_from_cache(code, period, adjust)
+    cached = _kline_cache.get(f"kline:{code}:{period}:{adjust}", layer="disk")
     if cached and len(cached) >= limit:
         return cached[-limit:]
 
@@ -583,7 +599,7 @@ def get_kline_a(code, period="daily", adjust="qfq", limit=120):
         records.sort(key=lambda x: x.get("日期", ""))
 
     if records:
-        _kline_to_cache(code, period, adjust, records)
+        _kline_cache.set(f"kline:{code}:{period}:{adjust}", records, layer="disk")
         return records[-limit:]
     return [{"error": f"获取A股K线失败: {code}"}]
 
@@ -593,7 +609,7 @@ def get_kline_hk(code, period="daily", limit=120):
     # 校验 period
     if period not in {"daily", "weekly", "monthly"}:
         return [{"error": f"不支持的K线类型: {period}，支持 daily/weekly/monthly"}]
-    cached = _kline_from_cache(code, period, "")
+    cached = _kline_cache.get(f"kline:{code}:{period}:", layer="disk")
     if cached and len(cached) >= limit:
         return cached[-limit:]
 
@@ -601,7 +617,7 @@ def get_kline_hk(code, period="daily", limit=120):
     # 仅 AKShare 新浪（TDX 协议不支持港股 K 线）
     try:
         ak = _get_ak()
-        df = _call_with_net_timeout(lambda: ak.stock_hk_daily(symbol=code, adjust=""))
+        df = _call_with_net_timeout(lambda: ak.stock_hk_daily(symbol=code, adjust="qfq"))
         if df is not None and not df.empty:
             if period in ("weekly", "monthly"):
                 df = _resample_kline(df, period)
@@ -620,8 +636,33 @@ def get_kline_hk(code, period="daily", limit=120):
         _api_logger.warning("港股/美股K线获取失败: %s [%s]", e, code)
         pass
 
+    # ── yfinance 兜底（AKShare 港股失败时）──
+    if not records:
+        try:
+            yf = _get_yf()
+            ticker = yf.Ticker(code)
+            yf_period = "1y" if limit > 120 else "6mo" if limit > 60 else "3mo"
+            yf_df = ticker.history(period=yf_period)
+            if yf_df is not None and not yf_df.empty:
+                yf_df = yf_df.tail(limit)
+                for idx, row in yf_df.iterrows():
+                    records.append({
+                        "日期": str(idx.date()) if hasattr(idx, 'date') else str(idx)[:10],
+                        "开盘价": _safe_float(row.get("Open")),
+                        "收盘价": _safe_float(row.get("Close")),
+                        "最高价": _safe_float(row.get("High")),
+                        "最低价": _safe_float(row.get("Low")),
+                        "成交量(手)": _safe_float(row.get("Volume")),
+                        "成交额(元)": None,
+                        "涨跌幅": None,
+                    })
+                records.reverse()
+        except Exception as e:
+            _api_logger.warning("yfinance 港股K线降级失败: %s [%s]", e, code)
+            pass
+
     if records:
-        _kline_to_cache(code, period, "", records)
+        _kline_cache.set(f"kline:{code}:{period}:", records, layer="disk")
         return records[-limit:]
     return [{"error": f"获取港股K线失败: {code}"}]
 
@@ -631,14 +672,15 @@ def get_kline_us(code, period="daily", limit=120):
     # 校验 period
     if period not in {"daily", "weekly", "monthly"}:
         return [{"error": f"不支持的K线类型: {period}，支持 daily/weekly/monthly"}]
-    cached = _kline_from_cache(code, period, "")
+    cached = _kline_cache.get(f"kline:{code}:{period}:", layer="disk")
     if cached and len(cached) >= limit:
         return cached[-limit:]
 
     records = []
     try:
         ak = _get_ak()
-        df = _call_with_net_timeout(lambda: ak.stock_us_daily(symbol=code, adjust=""))
+        # 美股数据量较大，使用 30s 超时
+        df = _call_with_net_timeout(lambda: ak.stock_us_daily(symbol=code, adjust="qfq"), timeout=30)
         if df is None or df.empty:
             # 降级: 东方财富美股历史数据 (格式: 市场代码.股票代码, 105=NASDAQ, 106=NYSE)
             for prefix in ("105", "106"):
@@ -682,8 +724,33 @@ def get_kline_us(code, period="daily", limit=120):
         _api_logger.warning("港股/美股K线获取失败: %s [%s]", e, code)
         pass
 
+    # ── yfinance 兜底（AKShare 美股失败时）──
+    if not records:
+        try:
+            yf = _get_yf()
+            ticker = yf.Ticker(code)
+            yf_period = "1y" if limit > 120 else "6mo" if limit > 60 else "3mo"
+            yf_df = ticker.history(period=yf_period)
+            if yf_df is not None and not yf_df.empty:
+                yf_df = yf_df.tail(limit)
+                for idx, row in yf_df.iterrows():
+                    records.append({
+                        "日期": str(idx.date()) if hasattr(idx, 'date') else str(idx)[:10],
+                        "开盘价": _safe_float(row.get("Open")),
+                        "收盘价": _safe_float(row.get("Close")),
+                        "最高价": _safe_float(row.get("High")),
+                        "最低价": _safe_float(row.get("Low")),
+                        "成交量(手)": _safe_float(row.get("Volume")),
+                        "成交额(元)": None,
+                        "涨跌幅": None,
+                    })
+                records.reverse()
+        except Exception as e:
+            _api_logger.warning("yfinance 美股K线降级失败: %s [%s]", e, code)
+            pass
+
     if records:
-        _kline_to_cache(code, period, "", records)
+        _kline_cache.set(f"kline:{code}:{period}:", records, layer="disk")
         return records[-limit:]
     return [{"error": f"获取美股K线失败: {code}"}]
 
@@ -760,7 +827,7 @@ def get_market_indices(market="a"):
                 if row and isinstance(row, dict) and not row.get("error"):
                     result.append({
                         "名称": name, "代码": code,
-                        "最新价": _safe_float(row.get("最新价", row.get("close", row.get("price")))),
+                        "最新价": _safe_float(row.get("最新价", row.get("close", row.get("price", row.get("last_price", row.get("last_close")))))),
                         "涨跌幅": _safe_float(row.get("涨跌幅", row.get("change_pct", row.get("涨跌比例")))),
                         "涨跌额": _safe_float(row.get("涨跌额", row.get("change"))),
                         "今开": _safe_float(row.get("今开", row.get("open"))),
@@ -770,6 +837,9 @@ def get_market_indices(market="a"):
                         "成交量": _safe_float(row.get("成交量", row.get("volume"))),
                         "成交额": _safe_float(row.get("成交额", row.get("amount"))),
                     })
+                    # 异常值检测：上证/深证/创业板/沪深300/科创50 正常值应 > 100，若获取到明显错误的值则丢弃
+                    if result and result[-1]["最新价"] is not None and result[-1]["最新价"] < 100 and code in ("000001", "399001", "399006", "000300", "000688", "000016", "000905", "000852"):
+                        result.pop()  # 删除异常条目，后续由 AKShare 兜底
             except Exception:
                 pass
 
@@ -861,9 +931,32 @@ def get_sector_ranking(market="a", sector_type="industry", top_n=10):
                 return []
             # 同花顺返回的列名与东方财富不同，适配一下
             result = _df_to_records(df.head(top_n))
+            # 字段名归一化映射
+            _SECTOR_FIELD_MAP = {
+                "板块名称": "名称", "概念名称": "名称", "name": "名称",
+                "板块代码": "代码", "code": "代码",
+                "最新价": "最新价", "current_price": "最新价",
+                "涨跌幅": "涨跌幅", "涨幅": "涨跌幅", "pct_change": "涨跌幅",
+                "涨跌额": "涨跌额", "change": "涨跌额",
+                "总市值": "总市值", "total_market_cap": "总市值",
+                "换手率": "换手率", "turnover_rate": "换手率",
+                "市盈率": "市盈率", "PE": "市盈率", "pe_ratio": "市盈率",
+                "上涨家数": "上涨家数", "up_num": "上涨家数",
+                "下跌家数": "下跌家数", "down_num": "下跌家数",
+                "成交量": "成交量", "volume": "成交量",
+                "成交额": "成交额", "amount": "成交额",
+                "排名": "排名", "rank": "排名",
+                "序号": "排名",
+            }
+            normalized = []
             for r in result:
-                r["市场"] = "A股"
-            return result
+                nr = {}
+                for orig_k, orig_v in r.items():
+                    mapped_k = _SECTOR_FIELD_MAP.get(orig_k, orig_k)
+                    nr[mapped_k] = orig_v
+                nr["市场"] = "A股"
+                normalized.append(nr)
+            return normalized
         except Exception as e:
             return [{"error": f"获取板块排行失败: {e}"}]
     return []
@@ -877,14 +970,17 @@ def get_north_flow(days=5):
     """北向/南向资金流向"""
     ak = _get_ak()
     # 尝试多个接口
-    for symbol_name in ["北上", "沪股通", "深股通"]:
+    for sym in ["北向资金", "沪港通资金", ""]:
         try:
-            df = _call_with_net_timeout(lambda s=symbol_name: ak.stock_hsgt_hist_em(symbol=s))
+            if sym:
+                df = _call_with_net_timeout(lambda s=sym: ak.stock_hsgt_hist_em(symbol=s))
+            else:
+                df = _call_with_net_timeout(lambda: ak.stock_hsgt_hist_em())
             if df is not None and not df.empty:
                 records = _df_to_records(df.tail(days))
                 return {"类型": "北向资金(沪深港通)", "最近天数": len(records), "数据": records, "数据源": "AKShare"}
         except Exception as e:
-            _api_logger.warning("北向资金获取失败: %s", e)
+            _api_logger.warning("北向资金获取失败(sym=%s): %s", sym, e)
             pass
     return {"提示": "暂无北向资金数据", "数据": []}
 
@@ -1124,22 +1220,39 @@ def search_stocks(market: str, keyword: str, top_n: int = 10) -> list[dict]:
     # 收集所有候选股
     candidates: list[tuple[str, str, str]] = []  # (code, name, market_label)
 
-    if market == "a":
+    # 归一化 market 参数：支持中文别名
+    m = market.strip().lower()
+    if m in ("a", "a股"):
+        _market = "a"
+    elif m in ("hk", "港股"):
+        _market = "hk"
+    elif m in ("us", "美股"):
+        _market = "us"
+    else:
+        _market = "all"
+
+    if _market == "a":
         for code, name in STOCK_MAPPING.items():
             candidates.append((code, name, "A股"))
         # HOT_STOCKS 也包含额外A股
         for s in HOT_STOCKS:
             if s["市场"] == "A股":
                 candidates.append((s["代码"], s["名称"], "A股"))
-    elif market == "hk":
+    elif _market == "hk":
         for s in HOT_STOCKS:
             if s["市场"] == "港股":
                 candidates.append((s["代码"], s["名称"], "港股"))
-    elif market == "us":
+    elif _market == "us":
         for s in HOT_STOCKS:
             if s["市场"] == "美股":
                 candidates.append((s["代码"], s["名称"], "美股"))
     else:
+        # all: 包含 A 股 + 港股 + 美股
+        market_labels = {"A股": "A股", "港股": "港股", "美股": "美股"}
+        for s in HOT_STOCKS:
+            label = market_labels.get(s["市场"])
+            if label:
+                candidates.append((s["代码"], s["名称"], label))
         for code, name in STOCK_MAPPING.items():
             candidates.append((code, name, "A股"))
 
@@ -1215,10 +1328,54 @@ from mcp_finance.errors import InvalidCodeError, NoDataError, StockError
 _logger = _api_logger
 
 
+def _detect_market(code: str) -> str:
+    """根据代码格式自动判断市场: a/hk/us/futures/unknown
+    优先级: 显式市场后缀 > 数字位数规则 > 字母兜底
+    """
+    import re
+    if not code or not isinstance(code, str):
+        return "unknown"
+
+    code = code.strip().upper()
+
+    # 1. 优先匹配显式市场后缀（准确率最高）
+    suffix_map = {
+        ".SH": "a", ".SZ": "a", ".BJ": "a",
+        ".HK": "hk",
+        ".US": "us", ".O": "us", ".N": "us",
+    }
+    for suffix, market in suffix_map.items():
+        if code.endswith(suffix):
+            return market
+
+    # 提取纯代码主体（去掉后缀部分）
+    code_body = code.split(".")[0]
+
+    # 2. 纯数字场景按位数判断
+    if code_body.isdigit():
+        length = len(code_body)
+        if length == 6:
+            return "a"       # 6位数字默认A股
+        elif 3 <= length <= 5:
+            return "hk"       # 3-5位数字默认港股（兼容省略前置零，如 700→00700）
+        else:
+            return "unknown"
+
+    # 3. 含字母的非后缀场景，兜底为美股
+    if re.search(r"[A-Z]", code_body):
+        return "us"
+
+    return "unknown"
+
+
 def handle_realtime_quote(arguments):
     """统一实时行情 handler"""
-    code = arguments["code"]
-    market = arguments.get("market", "a")
+    code_raw = arguments["code"]
+    market = arguments.get("market", "") or _detect_market(code_raw)  # 用原始代码检测市场
+    code = code_raw.strip().upper().split(".")[0]  # 去掉后缀
+    # 港股纯数字代码补齐到5位
+    if market == "hk" and code.isdigit() and len(code) < 5:
+        code = code.zfill(5)
     fn_map = {"a": get_realtime_quote_a, "hk": get_realtime_quote_hk, "us": get_realtime_quote_us, "futures": get_realtime_quote_futures}
     fn = fn_map.get(market)
     if fn is None:
@@ -1230,9 +1387,13 @@ def handle_realtime_quote(arguments):
 
 
 def handle_kline(arguments):
-    """K线数据 handler"""
-    code = arguments["code"]
-    market = arguments.get("market", "a")
+    """K线数据 handler — 自动识别市场"""
+    code_raw = arguments["code"]
+    market = arguments.get("market", "") or _detect_market(code_raw)  # 用原始代码检测市场
+    code = code_raw.strip().upper().split(".")[0]  # 去掉后缀
+    # 港股纯数字代码补齐到5位
+    if market == "hk" and code.isdigit() and len(code) < 5:
+        code = code.zfill(5)
     ktype = arguments.get("ktype", "daily")
     limit = min(arguments.get("limit", 120), 800)
     adjust = arguments.get("adjust", "qfq")
@@ -1253,9 +1414,13 @@ def handle_kline(arguments):
 
 
 def handle_financials(arguments):
-    """财务数据 handler"""
-    code = arguments["code"]
-    market = arguments.get("market", "a")
+    """财务数据 handler — 自动识别市场"""
+    code_raw = arguments["code"]
+    market = arguments.get("market", "") or _detect_market(code_raw)  # 用原始代码检测市场
+    code = code_raw.strip().upper().split(".")[0]  # 去掉后缀
+    # 港股纯数字代码补齐到5位
+    if market == "hk" and code.isdigit() and len(code) < 5:
+        code = code.zfill(5)
     count = arguments.get("count", 4)
     if market == "a":
         data = get_financials_a(code, count=count)
@@ -1267,17 +1432,61 @@ def handle_financials(arguments):
         try:
             akshare = _get_ak()
             if market == "hk":
-                df = _call_with_net_timeout(lambda: akshare.stock_hk_financial_indicator(symbol=code))
+                df = _call_with_net_timeout(lambda: akshare.stock_hk_financial_indicator_em(symbol=code))
             else:
-                df = _call_with_net_timeout(lambda: akshare.stock_us_financial_indicator(symbol=code))
+                df = _call_with_net_timeout(lambda: akshare.stock_financial_us_analysis_indicator_em(symbol=code, indicator="年报"))
             if df is not None and not df.empty:
                 records = []
                 for _, row in df.head(count).iterrows():
                     records.append({str(k): (None if pd.isna(v) else v) for k, v in row.items()})
-                return {"数据": records, "市场": market, "提示": "港股/美股财务数据来自AKShare,字段与A股不同"}
+                return {"数据": records, "市场": market, "数据源": "AKShare", "提示": "港股/美股财务数据来自AKShare,字段与A股不同"}
         except Exception as e:
             _api_logger.warning("港股/美股财务数据获取失败: %s [%s]", e, code)
             pass
+
+        # ── yfinance 兜底 ──
+        try:
+            yf = _get_yf()
+            ticker = yf.Ticker(code)
+            info = ticker.info
+            # 提取关键财务指标
+            financials_data = {}
+            if info:
+                key_fields = {
+                    "longName": "公司名称", "marketCap": "总市值",
+                    "trailingPE": "市盈率(TTM)", "forwardPE": "前瞻市盈率",
+                    "priceToBook": "市净率", "returnOnEquity": "净资产收益率(ROE)",
+                    "revenueGrowth": "营收增长率", "earningsGrowth": "净利润增长率",
+                    "profitMargins": "净利润率", "operatingMargins": "营业利润率",
+                    "currentRatio": "流动比率", "debtToEquity": "资产负债率",
+                    "dividendYield": "股息率", "payoutRatio": "分红率",
+                    "freeCashflow": "自由现金流", "operatingCashflow": "经营性现金流",
+                    "totalRevenue": "总营收", "grossProfits": "毛利润",
+                    "ebitda": "EBITDA", "enterpriseValue": "企业价值",
+                }
+                for eng_key, cn_name in key_fields.items():
+                    val = info.get(eng_key)
+                    if val is not None:
+                        financials_data[cn_name] = val
+                # 尝试获取利润表
+                try:
+                    fs = ticker.financials
+                    if fs is not None and not fs.empty:
+                        fs_json = fs.head(count).to_dict()
+                        financials_data["财务报表(利润表)"] = str(fs_json)
+                except Exception:
+                    pass
+            if financials_data:
+                return {
+                    "数据": [financials_data],
+                    "市场": market,
+                    "数据源": "yfinance",
+                    "提示": "港股/美股财务数据来自yfinance,字段可能与A股不同",
+                }
+        except Exception as e:
+            _api_logger.warning("yfinance 财务数据兜底失败: %s [%s]", e, code)
+            pass
+
         raise NoDataError(f"暂不支持 {market} 市场的财务数据查询,请使用其他工具")
     else:
         raise NoDataError(f"暂不支持 {market} 市场的财务数据查询")

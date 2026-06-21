@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.8.0] - 2025-06
+
+### 新增
+- **yfinance 三数据源架构**：港股/美股 K线和行情加 yfinance 兜底，AKShare 失败时自动降级
+- **港美股回测全支持**：`backtest_strategy` / `optimize_strategy` 自动识别 A 股(6位)/港股(5位)/美股(字母)代码
+- **市场自动识别**：`_detect_market()` 支持后缀(.SH/.SZ/.HK)、3-5位数字港股、字母美股
+- **港股代码自动补零**：`700` → `00700`
+- **美股财务数据**：AKShare `stock_financial_us_analysis_indicator_em` + `stock_hk_financial_indicator_em` 正确 API 调用 + yfinance 兜底
+- **HOT_STOCKS 美股扩充**：7 → 20 只（BABA, JD, PDD, AMD, INTC, NFLX 等）
+- **set_alert 单次预警**：`monitor.py` 支持价格突破/跌破/均线金叉死叉/RSI/MACD 条件
+- **pybroker_backtest 占位实现**：返回实验性功能说明，避免 No module 崩溃
+
+### 优化
+- **参数优化性能提升 125x**：`ProcessPoolExecutor` → `ThreadPoolExecutor`，K线 800→400，优化模式跳过冗余分析器，20 组合从 100s+ 降至 0.8s
+- **optimize_strategy 独占 180s 超时**：不再被 90s 限制截断
+- **position sizing 修复**：高价股 `int()` 截断导致 0 股 → 加守护逻辑 + 跳过原因记录
+- **certifi 证书修复**：修复 yfinance SSL 连接问题
+
+### 修复
+- `chart.py` `_calc_ema` → `_ema` 拼写错误
+- 港股 K线 `adjust=""` → `adjust="qfq"` 价格异常
+- 北向资金 API 符号参数修正
+- `handle_financials` AKShare API 名称更新
+- `get_sector_ranking` 字段映射扩展
+- `get_market_indices` 指数异常值检测
+- `search_stocks` 中文市场别名 + 全市场搜索
+- `_get_single_quote` 港美股名称 STOCK_MAPPING+HOT_STOCKS+yfinance 三重兜底
+
 ## [0.7.0] - 2025-06
 
 ### 新增

@@ -144,7 +144,7 @@ def generate_kline_chart(
     # ═══════════════════════════════════════════
     if show_macd and row_macd:
         dif = _ema(closes, 12)
-        dea = _calc_ema(closes, 26)
+        dea = _ema(closes, 26)
         macd_dif: list[float | None] = []
         for i in range(len(closes)):
             if dif[i] is not None and dea[i] is not None:
@@ -388,16 +388,18 @@ _clogger = get_logger(__name__)
 def handle_plot_kline(arguments: dict[str, Any]) -> dict[str, Any]:
     """生成交互式 K 线图 handler"""
     from typing import Any
-    from mcp_finance.api import get_kline_a
+    from mcp_finance.api import get_kline_a, get_kline_hk, get_kline_us, get_kline_futures, _detect_market
     from mcp_finance.indicators import compute_all_indicators
     from mcp_finance.data import STOCK_MAPPING
 
-    code = arguments["code"]
-    market = arguments.get("market", "a")
+    code_raw = arguments["code"]
+    market = arguments.get("market", "") or _detect_market(code_raw)  # 用原始代码检测市场
+    code = code_raw.strip().upper().split(".")[0]  # 去掉后缀
+    if market == "hk" and code.isdigit() and len(code) < 5:
+        code = code.zfill(5)
     days = min(arguments.get("days", 120), 800)
     ktype = arguments.get("ktype", "daily")
 
-    from mcp_finance.api import get_kline_a, get_kline_hk, get_kline_us, get_kline_futures
     kline_fn = {"a": get_kline_a, "hk": get_kline_hk, "us": get_kline_us, "futures": get_kline_futures}.get(market)
     if kline_fn is None:
         raise NoDataError(f"不支持的市场类型: {market}")

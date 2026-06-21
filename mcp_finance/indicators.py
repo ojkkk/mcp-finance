@@ -453,11 +453,14 @@ _ilogger = get_logger(__name__)
 
 def handle_technical_indicators(arguments: dict[str, Any]) -> dict[str, Any]:
     """计算技术指标 + 信号识别"""
-    from mcp_finance.api import get_kline_a
     from mcp_finance.data import STOCK_MAPPING
 
-    code = arguments["code"]
-    market = arguments.get("market", "a")
+    from mcp_finance.api import _detect_market
+    code_raw = arguments["code"]
+    market = arguments.get("market", "") or _detect_market(code_raw)  # 用原始代码检测市场
+    code = code_raw.strip().upper().split(".")[0]  # 去掉后缀
+    if market == "hk" and code.isdigit() and len(code) < 5:
+        code = code.zfill(5)
     days = min(arguments.get("days", 120), 800)
     ktype = arguments.get("ktype", "daily")
 
