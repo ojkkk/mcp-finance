@@ -116,8 +116,6 @@ class ScreenerParams(BaseModel):
     min_pb: Optional[float] = Field(default=None, ge=0)
     max_pb: Optional[float] = Field(default=None, ge=0)
     min_roe: Optional[float] = Field(default=None, ge=-100, le=100, description="最低净资产收益率 ROE(%) — 通过财务缓存获取")
-    min_main_inflow: Optional[float] = Field(default=None, description="最低主力净流入（万元），正值表示净流入 — 通过 easy-tdx 获取")
-    min_dividend: Optional[float] = Field(default=None, ge=0, le=100, description="（暂不可用）最低股息率(%) — 数据源不支持，传入不生效")
     top_n: int = Field(default=50, ge=1, le=200)
 
 
@@ -198,6 +196,86 @@ class PlotKlineParams(StockCodeModel):
         return v
 
 
+# ── 新增工具校验 (方向2-6) ──
+
+class MinuteKlineParams(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20)
+    freq: str = Field(default="5")
+    limit: int = Field(default=240, ge=1, le=800)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("股票代码不能为空")
+        return v
+
+    @field_validator("freq")
+    @classmethod
+    def validate_freq(cls, v: str) -> str:
+        if v not in {"1", "5", "15", "30", "60"}:
+            raise ValueError("freq 必须是 1/5/15/30/60")
+        return v
+
+
+class FundFlowParams(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20)
+    days: int = Field(default=5, ge=1, le=60)
+
+
+class InstitutionalHoldingsParams(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20)
+
+
+class MacroDataParams(BaseModel):
+    indicator: str = Field(default="cpi")
+    limit: int = Field(default=20, ge=1, le=100)
+
+    @field_validator("indicator")
+    @classmethod
+    def validate_indicator(cls, v: str) -> str:
+        if v not in {"gdp", "cpi", "pmi", "money_supply", "fx_reserve"}:
+            raise ValueError("indicator 必须是 gdp/cpi/pmi/money_supply/fx_reserve")
+        return v
+
+
+class ResearchReportsParams(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20)
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+class AnalyzeStockParams(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20)
+
+
+class CompareStocksParams(BaseModel):
+    codes: list[str] = Field(..., min_length=2, max_length=10)
+
+
+class FactorScreenerParams(BaseModel):
+    top_n: int = Field(default=30, ge=1, le=100)
+    min_market_cap: float = Field(default=50, ge=0)
+
+
+class PortfolioBacktestParams(BaseModel):
+    codes: list[str] = Field(..., min_length=1, max_length=20)
+    weights: Optional[list[float]] = Field(default=None)
+    initial_capital: float = Field(default=100000, ge=1000, le=1e9)
+    days: int = Field(default=250, ge=20, le=800)
+
+
+class CorrelationMatrixParams(BaseModel):
+    codes: list[str] = Field(..., min_length=2, max_length=20)
+    days: int = Field(default=120, ge=20, le=800)
+
+
+class ComparisonChartParams(BaseModel):
+    codes: list[str] = Field(..., min_length=2, max_length=10)
+    days: int = Field(default=120, ge=10, le=800)
+
+
+
 def validate_and_coerce(model_cls: type[BaseModel], arguments: dict[str, Any]) -> dict[str, Any]:
     """验证参数并返回清洗后的字典，失败则抛出 StockError"""
     from mcp_finance.errors import StockError
@@ -215,3 +293,96 @@ def validate_and_coerce(model_cls: type[BaseModel], arguments: dict[str, Any]) -
                 errors.append(f"{loc}: {msg}")
         error_msg = "; ".join(errors) if errors else str(e)
         raise StockError(f"参数校验失败: {error_msg}", code="VALIDATION_ERROR")
+
+
+class RealtimeQuoteParams(BaseModel):
+    code: str = Field(..., description="股票代码或名称", min_length=1, max_length=20)
+    market: str = Field(default="a", description="市场: a/hk/us/futures")
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("股票代码不能为空")
+        return v
+
+
+class MarketIndicesParams(BaseModel):
+    market: str = Field(default="a", description="市场: a/hk/us")
+
+    @field_validator("market")
+    @classmethod
+    def validate_market(cls, v: str) -> str:
+        if v not in {"a", "hk", "us"}:
+            raise ValueError("market 必须是 a/hk/us")
+        return v
+
+
+class BatchQuotesParams(BaseModel):
+    codes: list[str] = Field(..., description="股票代码列表", min_length=1, max_length=50)
+    market: str = Field(default="a", description="市场: a/hk/us")
+
+    @field_validator("codes")
+    @classmethod
+    def validate_codes(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("codes 不能为空")
+        return [c.strip() for c in v if c.strip()]
+
+
+class DragonTigerParams(BaseModel):
+    date: Optional[str] = Field(default=None, description="日期 YYYYMMDD，如 '20250613'")
+    
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not _is_valid_date_compact(v):
+            raise ValueError(f"date 格式错误: {v}，应为 YYYYMMDD")
+        return v
+
+
+class BlockTradesParams(BaseModel):
+    symbol: Optional[str] = Field(default=None, description="股票代码，留空返回全市场")
+    start_date: Optional[str] = Field(default=None, description="开始日期 YYYY-MM-DD")
+    end_date: Optional[str] = Field(default=None, description="结束日期 YYYY-MM-DD")
+    
+    @field_validator("start_date")
+    @classmethod
+    def validate_start_date(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not _is_valid_date(v):
+            raise ValueError(f"start_date 格式错误: {v}，应为 YYYY-MM-DD")
+        return v
+    
+    @field_validator("end_date")
+    @classmethod
+    def validate_end_date(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not _is_valid_date(v):
+            raise ValueError(f"end_date 格式错误: {v}，应为 YYYY-MM-DD")
+        return v
+
+
+class MarginTradingParams(BaseModel):
+    date: Optional[str] = Field(default=None, description="日期 YYYYMMDD，如 '20250613'")
+    market: str = Field(default="all", description="市场: sh/sz/all")
+    
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not _is_valid_date_compact(v):
+            raise ValueError(f"date 格式错误: {v}，应为 YYYYMMDD")
+        return v
+
+
+class SearchStockParams(BaseModel):
+    keyword: str = Field(..., description="搜索关键词（代码或名称）", min_length=1, max_length=50)
+    market: str = Field(default="a", description="市场: a/A股, hk/港股, us/美股")
+    top_n: int = Field(default=10, ge=1, le=100, description="最多返回条数")
+
+    @field_validator("keyword")
+    @classmethod
+    def validate_keyword(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("搜索关键词不能为空")
+        return v

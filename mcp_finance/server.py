@@ -29,7 +29,13 @@ from mcp_finance.api import handle_realtime_quote, handle_kline, handle_financia
 from mcp_finance.indicators import handle_technical_indicators
 from mcp_finance.screener import handle_stock_screener
 from mcp_finance.backtest import handle_backtest, handle_optimize
-from mcp_finance.chart import handle_plot_kline
+from mcp_finance.chart import handle_plot_kline, handle_comparison_chart
+from mcp_finance.portfolio import handle_correlation_matrix, handle_portfolio_backtest
+from mcp_finance.analysis import handle_analyze_stock, handle_compare_stocks, handle_factor_screener
+from mcp_finance.api_extended import (
+    handle_minute_kline, handle_fund_flow, handle_institutional_holdings,
+    handle_macro_data, handle_research_reports,
+)
 from mcp_finance.data import HOT_STOCKS
 from mcp_finance.errors import StockError, format_error_response
 from mcp_finance.logging_config import get_logger, set_level
@@ -84,11 +90,22 @@ TOOL_HANDLERS["stock_screener"] = handle_stock_screener
 TOOL_HANDLERS["backtest_strategy"] = handle_backtest
 TOOL_HANDLERS["optimize_strategy"] = handle_optimize
 TOOL_HANDLERS["plot_kline"] = handle_plot_kline
+TOOL_HANDLERS["comparison_chart"] = handle_comparison_chart
 TOOL_HANDLERS["get_dragon_tiger"] = handle_dragon_tiger
 TOOL_HANDLERS["get_block_trades"] = handle_block_trades
 TOOL_HANDLERS["get_margin_trading"] = handle_margin_trading
 TOOL_HANDLERS["get_futures_list"] = handle_futures_list
 TOOL_HANDLERS["test_data_sources"] = handle_test_data_sources
+TOOL_HANDLERS["get_minute_kline"] = handle_minute_kline
+TOOL_HANDLERS["get_fund_flow"] = handle_fund_flow
+TOOL_HANDLERS["get_institutional_holdings"] = handle_institutional_holdings
+TOOL_HANDLERS["get_macro_data"] = handle_macro_data
+TOOL_HANDLERS["get_research_reports"] = handle_research_reports
+TOOL_HANDLERS["analyze_stock"] = handle_analyze_stock
+TOOL_HANDLERS["compare_stocks"] = handle_compare_stocks
+TOOL_HANDLERS["factor_screener"] = handle_factor_screener
+TOOL_HANDLERS["correlation_matrix"] = handle_correlation_matrix
+TOOL_HANDLERS["portfolio_backtest"] = handle_portfolio_backtest
 
 
 # -- Search (纯本地，无网络) --
@@ -96,22 +113,6 @@ TOOL_HANDLERS["test_data_sources"] = handle_test_data_sources
 def _search_stock(args: dict) -> list:
     from mcp_finance.api import search_stocks
     return search_stocks(args.get("market", "a"), args["keyword"], args.get("top_n", 10))
-
-
-# -- Alert (一次性检查) --
-@_register("set_alert")
-def _set_alert(args: dict) -> dict:
-    from mcp_finance.monitor import handle_set_alert
-    return handle_set_alert(args)
-
-
-# -- PyBroker (placeholder) --
-@_register("pybroker_backtest")
-def _pybroker_backtest(args: dict) -> dict:
-    from mcp_finance.pybroker_strategy import handle_pybroker_backtest
-    return handle_pybroker_backtest(args)
-
-
 # ================================================================
 # Resources
 # ================================================================
@@ -121,9 +122,7 @@ async def list_resources() -> list[types.Resource]:
     return [
         types.Resource(uri="stock://popular", name="热门股票列表", description="常用A股/指数代码和名称", mimeType="application/json"),
         types.Resource(uri="stock://market/indices", name="大盘指数", description="上证/深证/创业板/沪深300/科创50实时行情", mimeType="application/json"),
-        types.Resource(uri="stock://{code}/realtime", name="个股实时行情", description="指定股票的实时行情数据", mimeType="application/json"),
-        types.Resource(uri="stock://{code}/kline", name="个股K线", description="指定股票最近30天日K线", mimeType="application/json"),
-        types.Resource(uri="stock://{code}/indicators", name="个股技术指标", description="指定股票的技术指标计算结果", mimeType="application/json"),
+
     ]
 
 
@@ -277,7 +276,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="stock_screener",
-            description="全市场 A 股筛选：按涨跌幅、量比、换手率、市盈率、市净率、ROE、主力净流入、市值等条件筛选股票，返回匹配列表。注意：股息率/主力净流入字段当前暂不可用（数据源不支持），传入对应参数将不生效",
+            description="全市场 A 股筛选：按涨跌幅、量比、换手率、市盈率、市净率、ROE、市值等条件筛选股票，返回匹配列表",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -288,10 +287,7 @@ async def list_tools() -> list[types.Tool]:
                     "max_pe": {"type": "number", "description": "最高市盈率（过滤亏损/高估值），如 50"},
                     "min_pb": {"type": "number", "description": "最低市净率 PB，如 1.0 表示至少 1 倍"},
                     "max_pb": {"type": "number", "description": "最高市净率 PB，如 5.0"},
-                    "min_roe": {"type": "number", "description": "最低净资产收益率 ROE(%)，如 10.0 — 通过财务缓存获取"},
-                    "min_main_inflow": {"type": "number", "description": "（暂不可用）最低主力净流入（万元），正值表示净流入，如 5000"},
-                    "min_dividend": {"type": "number", "description": "（暂不可用）最低股息率(%)，如 3.0 — 数据源不支持，传入此参数不生效"},
-                    "min_market_cap": {"type": "number", "description": "最低总市值（亿元），如 100"},
+                    "min_roe": {"type": "number", "description": "最低净资产收益率 ROE(%)，如 10.0 — 通过财务缓存获取"},                    "min_market_cap": {"type": "number", "description": "最低总市值（亿元），如 100"},
                     "top_n": {"type": "integer", "description": "返回前 N 条"},
                 },
             },
@@ -404,31 +400,133 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
-            name="set_alert",
-            description="单次预警检查：立即检查是否满足条件并返回结果。规则不会持久化 — 这是一次性检查，非后台持续盯盘。如需持续监控，请独立运行 run_monitor.py。条件支持：价格突破/跌破、涨跌幅阈值、MACD金叉死叉、均线金叉死叉、RSI超买超卖。触发后可通过钉钉/企业微信/Server酱推送",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "code": {"type": "string", "description": "6位股票代码"},
-                    "condition": {"type": "string", "description": "预警条件，如 'price_above:1900' 或 'macd_golden_cross'"},
-                    "channel": {"type": "string", "description": "推送渠道: dingtalk / wecom / serverchan"},
-                },
-                "required": ["code", "condition"],
-            },
-        ),
-        types.Tool(
-            name="pybroker_backtest",
-            description="均值比较信号回测（实验性）：基于技术指标均值比较生成买卖信号，非真正的 ML 模型。model_type 参数暂为占位符，所有模型走同一规则。",
+            name="get_minute_kline",
+            description="获取分钟级K线数据（仅A股）。支持1/5/15/30/60分钟周期，基于 easy-tdx 毫秒级数据源",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "code": {"type": "string", "description": "6位股票代码，如 '600519'"},
-                    "start_date": {"type": "string", "description": "开始日期，如 '2024-01-01'"},
-                    "end_date": {"type": "string", "description": "结束日期，如 '2024-12-31'"},
-                    "initial_capital": {"type": "number", "description": "初始资金（元），默认 100000"},
-                    "train_size": {"type": "number", "description": "训练集比例，默认 0.7"},
+                    "freq": {"type": "string", "description": "K线周期: 1/5/15/30/60，默认5分钟"},
+                    "limit": {"type": "integer", "description": "返回条数，默认240"},
                 },
                 "required": ["code"],
+            },
+        ),
+        types.Tool(
+            name="get_fund_flow",
+            description="获取个股资金流向（仅A股，主力净流入/成交额/换手率/量比），基于 easy-tdx 通达信实时数据，毫秒级响应",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "6位股票代码，如 '600519'"},
+                    "days": {"type": "integer", "description": "最近几天，默认5"},
+                },
+                "required": ["code"],
+            },
+        ),
+        types.Tool(
+            name="get_institutional_holdings",
+            description="获取个股十大流通股东/机构持仓数据（仅A股），基于 AKShare 东方财富",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "6位股票代码，如 '600519'"},
+                },
+                "required": ["code"],
+            },
+        ),
+        types.Tool(
+            name="get_macro_data",
+            description="获取中国宏观经济数据（仅中国）：GDP/CPI/PMI/货币供应量/外汇储备，基于 AKShare",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "indicator": {"type": "string", "description": "指标类型: gdp/cpi/pmi/money_supply/fx_reserve，默认 cpi"},
+                    "limit": {"type": "integer", "description": "返回最近几期，默认20"},
+                },
+            },
+        ),
+        types.Tool(
+            name="get_research_reports",
+            description="获取个股研报（仅A股，机构评级/目标价），基于 AKShare 东方财富",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "6位股票代码，如 '600519'"},
+                    "limit": {"type": "integer", "description": "返回条数，默认10"},
+                },
+                "required": ["code"],
+            },
+        ),
+        types.Tool(
+            name="analyze_stock",
+            description="综合个股分析：一站式返回行情+技术指标+均线排列+财务+综合评分（0-100），结果结构化供AI解读",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "6位股票代码，如 '600519'"},
+                },
+                "required": ["code"],
+            },
+        ),
+        types.Tool(
+            name="compare_stocks",
+            description="多股横向对比：同时分析多只股票，按综合评分排名，快速找出最优标的",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "codes": {"type": "array", "items": {"type": "string"}, "description": "股票代码列表，如 ['600519', '000858', '300750']"},
+                },
+                "required": ["codes"],
+            },
+        ),
+        types.Tool(
+            name="correlation_matrix",
+            description="计算多只股票收益率的相关性矩阵，找出低相关配对，辅助分散投资决策",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "codes": {"type": "array", "items": {"type": "string"}, "description": "股票代码列表，如 ['600519', '000858', '300750']"},
+                    "days": {"type": "integer", "description": "回溯天数，默认120"},
+                },
+                "required": ["codes"],
+            },
+        ),
+        types.Tool(
+            name="portfolio_backtest",
+            description="多股投资组合回测：支持自定义权重/等权，返回收益率/夏普/最大回撤/权益曲线",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "codes": {"type": "array", "items": {"type": "string"}, "description": "股票代码列表"},
+                    "weights": {"type": "array", "items": {"type": "number"}, "description": "权重列表，默认等权"},
+                    "initial_capital": {"type": "number", "description": "初始资金，默认100000"},
+                    "days": {"type": "integer", "description": "回溯天数，默认250"},
+                },
+                "required": ["codes"],
+            },
+        ),
+        types.Tool(
+            name="comparison_chart",
+            description="生成多只股票走势对比图（归一化），交互式HTML，支持缩放/平移/悬停查看数值",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "codes": {"type": "array", "items": {"type": "string"}, "description": "股票代码列表，如 ['600519', '000858']"},
+                    "days": {"type": "integer", "description": "回溯天数，默认120"},
+                },
+                "required": ["codes"],
+            },
+        ),
+        types.Tool(
+            name="factor_screener",
+            description="多因子选股：全市场A股按动量/价值/质量/增长/波动五因子综合打分排名，返回Top N。过滤ST和新股",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "top_n": {"type": "integer", "description": "返回前N名，默认30"},
+                    "min_market_cap": {"type": "number", "description": "最低总市值(亿)，默认50"},
+                },
             },
         ),
     ]
@@ -441,7 +539,7 @@ async def list_tools() -> list[types.Tool]:
 _TOOL_VALIDATORS: dict[str, Any] = {}
 try:
     from mcp_finance.validators import (
-        KlineParams, FinancialsParams, SectorRankingParams,
+        KlineParams, FinancialsParams, SectorRankingParams, RealtimeQuoteParams, MarketIndicesParams, BatchQuotesParams, DragonTigerParams, BlockTradesParams, MarginTradingParams, SearchStockParams, MinuteKlineParams, FundFlowParams, InstitutionalHoldingsParams, MacroDataParams, ResearchReportsParams, AnalyzeStockParams, CompareStocksParams, FactorScreenerParams, PortfolioBacktestParams, CorrelationMatrixParams, ComparisonChartParams,
         NorthFlowParams, TechnicalIndicatorsParams,
         ScreenerParams, BacktestParams, OptimizeParams,
         PlotKlineParams, validate_and_coerce,
@@ -456,6 +554,24 @@ try:
         "backtest_strategy": BacktestParams,
         "optimize_strategy": OptimizeParams,
         "plot_kline": PlotKlineParams,
+        "get_realtime_quote": RealtimeQuoteParams,
+        "get_market_indices": MarketIndicesParams,
+        "batch_quotes": BatchQuotesParams,
+        "get_dragon_tiger": DragonTigerParams,
+        "get_block_trades": BlockTradesParams,
+        "get_margin_trading": MarginTradingParams,
+        "search_stock": SearchStockParams,
+        "get_minute_kline": MinuteKlineParams,
+        "get_fund_flow": FundFlowParams,
+        "get_institutional_holdings": InstitutionalHoldingsParams,
+        "get_macro_data": MacroDataParams,
+        "get_research_reports": ResearchReportsParams,
+        "analyze_stock": AnalyzeStockParams,
+        "compare_stocks": CompareStocksParams,
+        "factor_screener": FactorScreenerParams,
+        "portfolio_backtest": PortfolioBacktestParams,
+        "correlation_matrix": CorrelationMatrixParams,
+        "comparison_chart": ComparisonChartParams,
     })
     _HAS_VALIDATORS = True
 except ImportError:

@@ -63,8 +63,7 @@ def screen_stocks(
     min_pb: float | None = None,
     max_pb: float | None = None,
     min_roe: float | None = None,
-    min_main_inflow: float | None = None,
-    min_dividend: float | None = None,
+    
     top_n: int = 50,
 ) -> dict[str, Any]:
     """
@@ -84,8 +83,6 @@ def screen_stocks(
         "min_pb": min_pb,
         "max_pb": max_pb,
         "min_roe": min_roe,
-        "min_main_inflow": min_main_inflow,
-        "min_dividend": min_dividend,
     }
 
     def _f(val: Any) -> float | None:
@@ -98,8 +95,7 @@ def screen_stocks(
 
     # ── 判断是否需要慢速维度 ──
     need_roe = min_roe is not None
-    need_inflow = min_main_inflow is not None
-    need_slow = need_roe or need_inflow or min_dividend is not None
+    need_slow = need_roe
 
     # ── 第一遍：快速维度过滤 ──
     candidates: list[dict[str, Any]] = []
@@ -157,14 +153,6 @@ def screen_stocks(
                             item["f37"] = fin["roe"]
 
             # 主力净流入: 批量获取
-            if need_inflow and candidate_codes:
-                inflow_results = get_main_inflow_batch(candidate_codes)
-                for item in candidates:
-                    code = item.get("f12", "")
-                    if code and code in inflow_results and inflow_results[code] is not None:
-                        item["f62"] = inflow_results[code] / 10000  # 元 → 万元
-
-    # ── 构建结果 ──
     matched: list[dict[str, Any]] = []
     for item in candidates:
         code = item.get("f12", "")
@@ -177,15 +165,10 @@ def screen_stocks(
         market_cap = _f(item.get("f20"))
         pb = _f(item.get("f23"))
         roe = _f(item.get("f37"))
-        dividend = _f(item.get("f45"))
-        main_inflow = _f(item.get("f62"))
+        dividend = _f(item.get("f45"))  # 保留字段但数据源暂不支持
 
         # 慢速维度过滤（仅当数据可用时才过滤）
         if min_roe is not None and roe is not None and roe < min_roe:
-            continue
-        if min_main_inflow is not None and main_inflow is not None and main_inflow < min_main_inflow:
-            continue
-        if min_dividend is not None and dividend is not None and dividend < min_dividend:
             continue
 
         matched.append({
@@ -200,7 +183,6 @@ def screen_stocks(
             "市净率(PB)": pb,
             "ROE(%)": roe,
             "股息率(%)": dividend,
-            "主力净流入(万元)": main_inflow,
             "总市值(元)": market_cap,
             "今开": item.get("f17"),
             "最高": item.get("f15"),
@@ -218,8 +200,6 @@ def screen_stocks(
     }
     if slow_skipped:
         result["_note"] = f"慢速维度(ROE/主力净流入)已跳过：候选股过多({len(candidates)}只 > {_MAX_SLOW_LOOKUPS}上限)，请缩小快速维度条件后重试"
-    if min_dividend is not None:
-        result.setdefault("_warnings", []).append("股息率(min_dividend)当前暂不可用：数据源(东方财富快照)不提供股息率字段，该参数不会生效")
 
     return result
 
@@ -246,8 +226,6 @@ def handle_stock_screener(arguments: dict[str, Any]) -> dict[str, Any]:
         min_pb=arguments.get("min_pb"),
         max_pb=arguments.get("max_pb"),
         min_roe=arguments.get("min_roe"),
-        min_main_inflow=arguments.get("min_main_inflow"),
-        min_dividend=arguments.get("min_dividend"),
         top_n=arguments.get("top_n", 50),
     )
     if not result.get("matched"):
