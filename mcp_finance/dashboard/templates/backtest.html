@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>mcp-finance · 策略回测</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<link rel="stylesheet" href="/static/common.css">
+</head>
+<body class="antialiased">
+<header class="app-header"><div class="header-inner">
+<a href="/" class="logo"><div class="logo-icon">M</div><span class="logo-text">mcp<span class="logo-sub">-finance</span></span></a>
+<nav class="nav-group"><a href="/" class="nav-item">行情</a><a href="/screener" class="nav-item">选股</a><a href="/backtest" class="nav-item active">回测</a></nav>
+<div class="status"><span class="live-dot"></span>策略引擎</div>
+</div></header>
+<main class="fade-in">
+
+<div class="card g24"><div class="card-header"><div class="ib ib-i">⚙️</div><h2>回测配置</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">8 种策略 · Backtrader 引擎</span></div>
+<div class="form-grid-bt g16">
+<div><div class="fl">股票代码</div><input id="bc" class="input" type="text" value="600519" placeholder="如 600519"></div>
+<div><div class="fl">策略</div><select id="bs" class="input"><option value="ma_cross">双均线 MA</option><option value="macd_signal">MACD 信号</option><option value="rsi_signal">RSI 信号</option><option value="kdj_signal">KDJ 信号</option><option value="boll_signal">布林 BOLL</option><option value="turtle">海龟交易</option><option value="vol_trend">波动率趋势</option><option value="mean_rev">均值回归</option></select></div>
+<div><div class="fl">开始日期</div><input id="bsd" class="input" type="date" value="2025-01-01"></div>
+<div><div class="fl">结束日期</div><input id="bed" class="input" type="date" value="2026-06-24"></div>
+<div><div class="fl">快线周期</div><input id="bf" class="input" type="number" value="5" min="2" max="200"></div>
+<div><div class="fl">慢线周期</div><input id="bsl" class="input" type="number" value="20" min="5" max="300"></div>
+<div><div class="fl">初始资金</div><input id="bcp" class="input" type="number" value="200000" min="10000" step="10000"></div>
+</div>
+<button id="bbtn" class="btn btn-p" onclick="runBacktest()">▶ 开始回测</button></div>
+
+<div id="bl" style="display:none" class="card g24"><div style="text-align:center;padding:32px 0;color:var(--mu-fg);font-size:14px"><span class="spin" style="vertical-align:middle;margin-right:10px"></span>回测引擎运行中…</div></div>
+<div id="be" style="display:none" class="card g24"><div class="err" id="be-msg"></div></div>
+
+<div id="br" style="display:none">
+<div class="fg g24" id="bst"></div>
+<div class="card g24"><div class="card-header"><div class="ib ib-v">📈</div><h2>权益曲线</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">策略 vs 买入持有</span></div><div style="width:100%;height:440px" id="bch"></div></div>
+<div class="card g24"><div class="card-header"><div class="ib ib-e">📋</div><h2>交易记录</h2></div>
+<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th>日期</th><th class="c">动作</th><th class="r">价格</th><th class="r">数量</th><th class="r">金额</th><th class="r">盈亏</th></tr></thead><tbody id="btr"></tbody></table></div></div>
+<div id="bsb" style="display:none" class="card"><div class="card-header"><div class="ib ib-a">💡</div><h2>策略解读</h2></div><div id="bsm" class="sum"></div></div>
+</div>
+
+</main>
+<script>
+function fm(v,d){if(v==null||isNaN(v))return"--";d=d!=null?d:2;return Number(v).toFixed(d)}
+function fv(v){if(v==null||isNaN(v))return"--";var a=Math.abs(v);if(a>=1e12)return(v/1e12).toFixed(2)+"万亿";if(a>=1e8)return(v/1e8).toFixed(2)+"亿";if(a>=1e4)return(v/1e4).toFixed(2)+"万";return Number(v).toFixed(0)}
+async function runBacktest(){
+var b=document.getElementById("bbtn");b.innerHTML='<span class="spin" style="width:16px;height:16px;border-width:2px;margin:0"></span> 回测中…';b.disabled=true;
+document.getElementById("bl").style.display="";document.getElementById("br").style.display="none";document.getElementById("be").style.display="none";
+try{var p={code:document.getElementById("bc").value.trim()||"600519",strategy:document.getElementById("bs").value,initial_capital:parseFloat(document.getElementById("bcp").value)||200000,fast_period:parseInt(document.getElementById("bf").value)||5,slow_period:parseInt(document.getElementById("bsl").value)||20};var sd=document.getElementById("bsd").value,ed=document.getElementById("bed").value;if(sd)p.start_date=sd;if(ed)p.end_date=ed;
+var r=await fetch("/api/backtest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});var d=await r.json();document.getElementById("bl").style.display="none";
+if(d.error){showError(typeof d.error==="string"?d.error:(d.message||"Unknown"));return}renderResult(d)}catch(e){document.getElementById("bl").style.display="none";showError(e.message)}resetBtn()}
+function showError(m){document.getElementById("be-msg").textContent=m;document.getElementById("be").style.display="";resetBtn()}
+function resetBtn(){var b=document.getElementById("bbtn");b.innerHTML="▶ 开始回测";b.disabled=false}
+
+function renderResult(d){
+var m=[{l:"累计收益率",k:"总收益率(%)",f:"pct"},{l:"年化收益率",k:"年化收益率(%)",f:"pct"},{l:"最终资金",k:"最终资金",f:"money"},{l:"夏普比率",k:"夏普比率",f:"num"},{l:"最大回撤",k:"最大回撤(%)",f:"pct"},{l:"胜率",k:"胜率(%)",f:"pct"},{l:"交易次数",k:"交易次数",f:"int"},{l:"年化波动率",k:"年化波动率(%)",f:"pct"}];
+document.getElementById("bst").innerHTML=m.map(function(x){var v=d[x.k],vl="--",cl="";if(v!=null){if(x.f==="pct"){vl=(v>=0?"+":"")+fm(v,2)+"%";cl=v>=0?"var(--up)":"var(--dn)"}else if(x.f==="money"){vl="¥"+fv(v);cl="var(--pri)"}else if(x.f==="int"){vl=parseInt(v)}else{vl=fm(v,3)}if(x.k==="最大回撤(%)")cl="var(--dn)"}return'<div class="si"><div class="si-l">'+x.l+'</div><div class="si-v" style="color:'+cl+'">'+vl+'</div></div>'}).join("");
+
+var eq=d["权益曲线"]||d["策略权益曲线"]||[],bm=d["基准(买入持有)"]||{},bmEq=bm["权益曲线"]||[];
+if(eq.length>0){var tr=[{x:eq.map(function(e){return e["日期"]||""}),y:eq.map(function(e){return e["市值"]||e["value"]||0}),type:"scatter",mode:"lines",name:"策略",line:{color:"#4F46E5",width:3},fill:"tozeroy",fillcolor:"rgba(79,70,229,0.05)",hovertemplate:"%{x}<br>¥%{y:,.0f}<extra></extra>"}];if(Array.isArray(bmEq)&&bmEq.length>0)tr.push({x:bmEq.map(function(e){return e["日期"]||""}),y:bmEq.map(function(e){return e["市值"]||e["value"]||0}),type:"scatter",mode:"lines",name:"买入持有",line:{color:"#94A3B8",width:2,dash:"dot"},hovertemplate:"%{x}<br>¥%{y:,.0f}<extra></extra>"});
+var bchEl=document.getElementById("bch");bchEl.style.display="";bchEl.innerHTML="";
+Plotly.newPlot("bch",tr,{margin:{l:75,r:25,t:10,b:50},paper_bgcolor:"#fff",plot_bgcolor:"#F8FAFC",autosize:true,xaxis:{color:"#94A3B8",gridcolor:"#E2E8F0",tickformat:"%m/%d",zeroline:false},yaxis:{color:"#94A3B8",gridcolor:"#E2E8F0",tickformat:",.0f",zeroline:false},legend:{x:0.01,y:0.99,font:{color:"#64748B",size:12},bgcolor:"rgba(255,255,255,0.9)",bordercolor:"#E2E8F0",borderwidth:1}},{responsive:true,displayModeBar:false})}else{document.getElementById("bch").innerHTML='<div class="emp">暂无权益曲线数据</div>'}
+
+var ts=d["交易记录"]||[];
+document.getElementById("btr").innerHTML=ts.length?ts.map(function(t){var dt=t["日期"]||"",act=(t["动作"]||t["买卖"]||""),pr=t["价格"],qty=t["股数"]||t["数量"],amt=t["金额"],pnl=t["盈亏"]||t["盈亏(元)"];var isBuy=act.indexOf("买")>=0;return'<tr><td class="cm">'+dt+'</td><td class="c" style="font-weight:700;color:'+(isBuy?"var(--up)":"var(--dn)")+'">'+act+'</td><td class="r" style="font-weight:500">'+fm(pr,2)+'</td><td class="mu">'+fm(qty,0)+'</td><td class="mu">¥'+fv(amt)+'</td><td class="r" style="font-weight:700;color:'+(pnl!=null?(pnl>=0?"var(--up)":"var(--dn)"):"var(--mu-fg)")+'">'+(pnl!=null?(pnl>=0?"+":"")+fv(pnl):"--")+'</td></tr>'}).join(""):'<tr><td colspan="6"><div class="emp">'+(eq.length?"无交易记录":"数据不足")+'</div></td></tr>';
+
+var s=d["解读"]||"";if(s){document.getElementById("bsm").innerHTML=s.replace(/\n/g,"<br>");document.getElementById("bsb").style.display=""}else{document.getElementById("bsb").style.display="none"}
+document.getElementById("br").style.display="";setTimeout(function(){document.getElementById("br").scrollIntoView({behavior:"smooth"})},100)}
+document.getElementById("bc").addEventListener("keydown",function(e){if(e.key==="Enter")runBacktest()});
+</script>
+</body>
+</html>

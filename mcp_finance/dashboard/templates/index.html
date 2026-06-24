@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>mcp-finance · 行情总览</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<link rel="stylesheet" href="/static/common.css">
+<style>.hot-table td{cursor:pointer}.search-box .input{max-width:200px}</style>
+</head>
+<body class="antialiased">
+<header class="app-header"><div class="header-inner">
+<a href="/" class="logo"><div class="logo-icon">M</div><span class="logo-text">mcp<span class="logo-sub">-finance</span></span></a>
+<nav class="nav-group"><a href="/" class="nav-item active">行情</a><a href="/screener" class="nav-item">选股</a><a href="/backtest" class="nav-item">回测</a></nav>
+<div class="status"><span class="live-dot"></span>实时行情</div>
+</div></header>
+<main class="fade-in">
+
+<div class="card g24"><div class="card-header"><div class="ib ib-i">📊</div><h2>大盘指数</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)" id="idx-time"></span></div>
+<div class="stats-row" id="idx-stats"><div class="si"><div class="sk" style="height:60px"></div></div></div></div>
+
+<div class="card g24"><div class="card-header"><div class="ib ib-r">🔥</div><h2>热门股票</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">点击行查看详情</span></div>
+<div class="tbl-wrap"><table class="hot-table"><thead><tr><th>代码</th><th>名称</th><th class="r">最新价</th><th class="r">涨跌幅</th><th class="r">今开</th><th class="r">最高</th><th class="r">最低</th><th class="r">成交额</th></tr></thead>
+<tbody id="hot-tbody"><tr><td colspan="8"><div class="sk" style="height:14px;margin:6px 0"></div></td></tr></tbody></table></div></div>
+
+<div class="card g24"><div class="card-header"><div class="ib ib-s">🏭</div><h2>板块排行</h2><div class="tab-bar" id="sector-tabs" style="margin-left:auto"><button class="tab active" onclick="loadSectors('industry',this)">行业</button><button class="tab" onclick="loadSectors('concept',this)">概念</button><button class="tab" onclick="loadSectors('region',this)">地域</button></div></div>
+<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th>名称</th><th class="r">最新价</th><th class="r">涨跌幅</th><th class="r">涨跌额</th><th class="r">涨速</th></tr></thead>
+<tbody id="sector-tbody"><tr><td colspan="5"><div class="sk" style="height:14px;margin:6px 0"></div></td></tr></tbody></table></div></div>
+
+<div class="card g24"><div class="card-header"><div class="ib ib-a">💰</div><h2>北向资金</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)" id="nf-source"></span></div>
+<div id="nf-content"><div class="sk" style="height:14px;margin:6px 0"></div></div></div>
+
+<div class="card g24"><div class="card-header"><div class="ib ib-v">🔍</div><h2>个股速查</h2></div>
+<div class="search-box g16"><input id="stock-search" class="input" placeholder="输入代码或名称，回车查询" style="max-width:260px"><button class="btn btn-p" onclick="searchStock()">查询</button></div>
+<div id="search-loading" style="display:none;text-align:center;padding:20px"><span class="spin"></span></div>
+<div id="search-error" style="display:none" class="err"></div>
+<div id="search-result" style="display:none"><div class="stats-row g16" id="quote-stats"></div><div style="width:100%;height:420px" id="stock-chart"></div></div></div>
+
+</main>
+<script>
+function fm(v,d){if(v==null||isNaN(v))return"--";d=d!=null?d:2;return Number(v).toFixed(d)}
+function fv(v){if(v==null||isNaN(v))return"--";var a=Math.abs(v);if(a>=1e12)return(v/1e12).toFixed(2)+"万亿";if(a>=1e8)return(v/1e8).toFixed(2)+"亿";if(a>=1e4)return(v/1e4).toFixed(2)+"万";return Number(v).toFixed(0)}
+function pfa(v){if(v==null||isNaN(v))return"--";var a=Math.abs(v);var s=v>=0?"+":"-";if(a>=1e8)return s+(a/1e8).toFixed(2)+"亿";if(a>=1e4)return s+(a/1e4).toFixed(2)+"万";return s+a.toFixed(0)}
+function pf(v){if(v==null||isNaN(v))return"--";return(v>=0?"+":"")+v.toFixed(2)+"%"}
+function pc(v){if(v==null||isNaN(v))return"mu";return v>0?"up":v<0?"dn":"mu"}
+function ps(v){if(v==null||isNaN(v))return"mu";return v>0?"up":v<0?"dn":"mu"}
+function api(u){return fetch(u).then(function(r){return r.json()}).then(function(d){if(d.error)throw new Error(typeof d.error==="string"?d.error:(d.message||"Unknown"));var data=d.data||d;if(!Array.isArray(data)&&typeof data==="object"&&Object.keys(data).length===0)return[];return data})}
+async function loadIndices(){var c=document.getElementById("idx-stats");try{var d=await api("/api/market/indices?market=a");if(!d||!d.length){c.innerHTML='<div class="emp">暂无指数数据</div>';return}c.innerHTML=d.map(function(x){var ch=x["涨跌幅"]!=null?x["涨跌幅"]:null,cl=ch!=null?(ch>=0?"var(--up)":"var(--dn)"):"var(--mu-fg)";return'<div class="si"><div class="si-l">'+x["名称"]+'</div><div class="si-v">'+fm(x["最新价"],2)+'</div><div class="si-c" style="color:'+cl+'">'+(ch!=null?pf(ch):"--")+'</div></div>'}).join("");document.getElementById("idx-time").textContent=new Date().toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})}catch(e){c.innerHTML='<div class="err">'+e.message+'</div>'}}
+async function loadSectors(type,btn){if(btn){document.querySelectorAll("#sector-tabs .tab").forEach(function(t){t.classList.remove("active")});btn.classList.add("active")}var tb=document.getElementById("sector-tbody");tb.innerHTML='<tr><td colspan="5"><div class="sk" style="height:14px;margin:6px 0"></div></td></tr>';try{var d=await api("/api/market/sectors?type="+type+"&top_n=25");if(!d||!d.length){tb.innerHTML='<tr><td colspan="5"><div class="emp">暂无板块数据</div></td></tr>';return}var allZero=d.every(function(s){return(s["涨速"]||0)===0});tb.innerHTML=d.map(function(s){return'<tr><td class="nm">'+s["名称"]+'</td><td class="pr">'+fm(s["最新价"],2)+'</td><td class="'+pc(s["涨跌幅"])+'">'+pf(s["涨跌幅"])+'</td><td class="'+pc(s["涨跌额"])+'">'+(s["涨跌额"]!=null?(s["涨跌额"]>0?"+":"")+fm(s["涨跌额"],2):"--")+'</td><td class="mu">'+(allZero?"--":(s["涨速"]!=null?fm(s["涨速"],2)+"%":"--"))+'</td></tr>'}).join("")}catch(e){tb.innerHTML='<tr><td colspan="5" class="err">'+e.message+'</td></tr>'}}
+async function loadNF(){var c=document.getElementById("nf-content");try{var d=await api("/api/market/north_flow?days=10");if(!d||!d.length){c.innerHTML='<div class="emp">暂无北向资金数据</div>';return}var hasFin=d.some(function(r){return(r["净买额"]||r["当日成交净买额"]||r["买入成交额"]||r["买入额"])!=null});if(hasFin){c.innerHTML='<div class="nf-grid">'+d.map(function(r){var nb=r["净买额"]||r["当日成交净买额"]||0,bi=r["买入额"]||r["买入成交额"]||0,si=r["卖出额"]||r["卖出成交额"]||0;var cl=nb>=0?"color:var(--up)":"color:var(--dn)";return'<div class="nf-row"><span class="nf-date">'+(r["日期"]||"")+'</span><span class="nf-amt" style="'+cl+'">'+pfa(nb)+'</span><span class="nf-detail">买 '+pfa(bi)+' / 卖 '+pfa(si)+'</span></div>'}).join("")+'</div>'}else{c.innerHTML='<div class="nf-grid">'+d.map(function(r){var idx=r["沪深300"]||"",pct=r["沪深300-涨跌幅"]||"",ld=r["领涨股"]||"",ldc=r["领涨股-代码"]||"";return'<div class="nf-row"><span class="nf-date">'+(r["日期"]||"")+'</span><span class="nf-ctx">沪深300: '+fm(idx,2)+' <span class="badge badge-'+ps(pct)+'">'+pf(pct)+'</span></span><span class="nf-ctx">领涨: '+ld+' ('+ldc+')</span></div>'}).join("")+'</div>'}}catch(e){c.innerHTML='<div class="err">'+e.message+'</div>'}}
+async function loadHot(){var tb=document.getElementById("hot-tbody");tb.innerHTML='<tr><td colspan="8"><div class="sk" style="height:14px;margin:6px 0"></div></td></tr>';try{var d=await api("/api/market/hot_stocks");if(!d||!d.length){tb.innerHTML='<tr><td colspan="8"><div class="emp">暂无数据（非交易时段）</div></td></tr>';return}tb.innerHTML=d.map(function(s){var cd=s["代码"]||"",nm=s["名称"]||"",ch=s["涨跌幅"],amt=s["成交额(元)"]||s["成交额"];return'<tr onclick="quickSearch(\''+cd+'\')"><td class="cm">'+cd+'</td><td class="nm">'+nm+'</td><td class="pr">'+fm(s["最新价"],2)+'</td><td class="'+pc(ch)+'">'+pf(ch)+'</td><td class="mu">'+fm(s["今开"],2)+'</td><td class="mu">'+fm(s["最高"],2)+'</td><td class="mu">'+fm(s["最低"],2)+'</td><td class="mu">'+fv(amt)+'</td></tr>'}).join("")}catch(e){tb.innerHTML='<tr><td colspan="8" class="err">'+e.message+'</td></tr>'}}
+function quickSearch(code){document.getElementById("stock-search").value=code;searchStock()}
+async function searchStock(){var kw=document.getElementById("stock-search").value.trim();if(!kw)return;var rd=document.getElementById("search-result"),ed=document.getElementById("search-error"),ld=document.getElementById("search-loading");rd.style.display="none";ed.style.display="none";ld.style.display="block";try{var sr=await fetch("/api/search?keyword="+encodeURIComponent(kw));var stocks=((await sr.json()).data||[]);if(!stocks.length){ld.style.display="none";ed.style.display="block";ed.textContent="未找到匹配股票";return}var cd=stocks[0].code,mkt=/^\d{6}$/.test(cd)?"a":/^\d{5}$/.test(cd)?"hk":"us";var[qr,kr]=await Promise.all([fetch("/api/realtime_quote?code="+cd+"&market="+mkt).then(function(r){return r.json()}),fetch("/api/kline?code="+cd+"&market="+mkt+"&limit=90").then(function(r){return r.json()})]);ld.style.display="none";var q=qr.data||qr,kd=kr.data||kr;document.getElementById("quote-stats").innerHTML=[["最新价","最新价"],["涨跌幅","涨跌幅"],["今开","今开"],["最高","最高"],["最低","最低"],["昨收","昨收"]].map(function(f){var v=q[f[1]];if(v==null)return"";return'<div class="si"><div class="si-l">'+f[0]+'</div><div class="si-v '+pc(f[0]==="涨跌幅"?v:null)+'">'+(f[0]==="涨跌幅"?pf(v):fm(v,v>1?2:4))+'</div></div>'}).join("");if(Array.isArray(kd)&&kd.length>0){var el=document.getElementById("stock-chart");el.style.display="";Plotly.newPlot("stock-chart",[{x:kd.map(function(k){return k["日期"]||k["date"]||""}),y:kd.map(function(k){return k["收盘价"]||k["close"]||k["最新价"]}),type:"scatter",mode:"lines",line:{color:"#4F46E5",width:2.5},fill:"tozeroy",fillcolor:"rgba(79,70,229,0.06)",hovertemplate:"%{x}<br>¥%{y:.2f}<extra></extra>"}],{margin:{l:55,r:15,t:5,b:40},paper_bgcolor:"#fff",plot_bgcolor:"#F8FAFC",xaxis:{color:"#94A3B8",gridcolor:"#E2E8F0",tickformat:"%m/%d",zeroline:false},yaxis:{color:"#94A3B8",gridcolor:"#E2E8F0",zeroline:false},showlegend:false},{responsive:true,displayModeBar:false})}rd.style.display="block"}catch(e){ld.style.display="none";ed.style.display="block";ed.textContent=e.message}}
+document.getElementById("stock-search").addEventListener("keydown",function(e){if(e.key==="Enter")searchStock()});
+document.addEventListener("DOMContentLoaded",function(){loadIndices();loadNF();loadSectors("industry",document.querySelector("#sector-tabs .tab"));loadHot()});
+</script>
+</body>
+</html>

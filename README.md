@@ -13,7 +13,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/MCP-1.4+-purple" alt="MCP">
-  <img src="https://img.shields.io/badge/version-0.9.0-orange" alt="v0.9.0">
+  <img src="https://img.shields.io/badge/version-0.9.4-orange" alt="v0.9.0">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT">
 </p>
 
@@ -168,6 +168,35 @@ codex mcp add mcp-finance -- python -m mcp_finance.server
 | 港股美股 | "腾讯港股 / 苹果股票 什么价？" |
 
 ---
+
+
+---
+
+## Web Dashboard
+
+`mcp-finance` 内置了一个本地 Web 界面，将 MCP Tools 的能力包装为可视化面板：
+
+```bash
+# 启动 Dashboard（默认 http://localhost:8080）
+mcp-dashboard
+# 或指定端口
+mcp-dashboard --port 3000
+```
+
+### 功能页面
+
+| 页面 | 说明 |
+|------|------|
+| **行情总览** | 大盘指数、热门股票、行业/概念/地域板块排行、北向资金流向、个股K线速查 |
+| **选股器** | 多因子排行（综合评分+动量+活跃度）+ 条件选股（涨跌幅/换手率/量比/PE/PB/市值/ROE） |
+| **策略回测** | 8 种策略（双均线/MACD/RSI/KDJ/BOLL/海龟/波动率趋势/均值回归），交互式权益曲线，交易记录明细 |
+
+### 设计
+
+- 双数据源：TDX（毫秒级行情+选股） + AKShare（财务/PE/PB/ROE，仅交易时段）
+- 选股器优先使用 TDX（~3s 全市场扫描），交易时段可切换 AKShare 获取完整财务数据
+- 响应式 UI，shadcn-inspired 设计系统
+- Plotly 交互式图表
 
 ## 数据源
 

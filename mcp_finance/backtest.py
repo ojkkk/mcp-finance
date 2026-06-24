@@ -154,7 +154,7 @@ class _BaseStrategy(bt.Strategy):
             if hasattr(dt, "strftime"):
                 date_str = dt.strftime("%Y-%m-%d")
             elif isinstance(dt, (int, float)):
-                date_str = datetime.fromtimestamp(dt).strftime("%Y-%m-%d")
+                date_str = bt.num2date(dt).strftime("%Y-%m-%d")
             else:
                 date_str = str(dt)[:10]
             self.trade_log.append({
@@ -840,4 +840,6 @@ def handle_optimize(arguments: dict[str, Any]) -> dict[str, Any]:
                                max_workers=arguments.get("max_workers"))
     _blogger.info("参数优化完成: %s strategy=%s", code, strategy)
     return result
+
+
 

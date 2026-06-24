@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>mcp-finance · 选股器</title>
+<link rel="stylesheet" href="/static/common.css">
+</head>
+<body class="antialiased">
+<header class="app-header"><div class="header-inner">
+<a href="/" class="logo"><div class="logo-icon">M</div><span class="logo-text">mcp<span class="logo-sub">-finance</span></span></a>
+<nav class="nav-group"><a href="/" class="nav-item">行情</a><a href="/screener" class="nav-item active">选股</a><a href="/backtest" class="nav-item">回测</a></nav>
+<div class="status"><span class="live-dot"></span>智能选股</div>
+</div></header>
+<main class="fade-in">
+
+<div class="card g24"><div class="card-header"><div class="ib ib-v">🏆</div><h2>多因子排行</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)" id="factor-meta"></span></div>
+<div class="form-grid g16">
+<div><div class="fl">返回数量</div><input id="ftop" class="input" type="number" value="30" min="5" max="100"></div>
+<div><div class="fl">最低市值(亿)</div><input id="fmc" class="input" type="number" value="10" min="1" step="5"></div>
+</div>
+<button class="btn btn-a" onclick="runFactor()">🚀 多因子选股</button></div>
+<div id="factor-loading" style="display:none;text-align:center;padding:20px"><span class="spin"></span><span style="margin-left:8px;color:var(--mu-fg);font-size:13px">扫描全市场...</span></div>
+<div id="factor-error" style="display:none" class="err"></div>
+<div id="factor-result" style="display:none">
+<div class="card g24"><div class="card-header"><div class="ib ib-e">📋</div><h2>排行结果</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)" id="factor-count"></span></div>
+<div class="tbl-wrap" style="max-height:520px;overflow-y:auto"><table><thead><tr><th>代码</th><th>名称</th><th class="r">最新价</th><th class="r">涨跌幅</th><th class="r">成交额</th><th class="r">评分</th><th class="r">动量</th><th class="r">活跃</th></tr></thead>
+<tbody id="factor-tbody"></tbody></table></div></div></div>
+
+<div class="card g24"><div class="card-header"><div class="ib ib-i">🔬</div><h2>条件选股</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">设置条件筛选</span></div>
+<div class="form-grid g16">
+<div><div class="fl">最低涨幅%</div><input id="min_gain" class="input" type="number" step="0.1" placeholder="不限"></div>
+<div><div class="fl">最高涨幅%</div><input id="max_gain" class="input" type="number" step="0.1" placeholder="不限"></div>
+<div><div class="fl">最低换手%</div><input id="min_turnover" class="input" type="number" step="0.1" placeholder="不限"></div>
+<div><div class="fl">最低量比</div><input id="min_volume_ratio" class="input" type="number" step="0.1" placeholder="不限"></div>
+<div><div class="fl">最高市盈率</div><input id="max_pe" class="input" type="number" step="0.1" placeholder="不限"></div>
+<div><div class="fl">最高市净率</div><input id="max_pb" class="input" type="number" step="0.1" placeholder="不限"></div>
+<div><div class="fl">最低市值(亿)</div><input id="min_market_cap" class="input" type="number" step="1" placeholder="不限"></div>
+<div><div class="fl">最低ROE%</div><input id="min_roe" class="input" type="number" step="0.1" placeholder="不限"></div>
+<div><div class="fl">返回数量</div><input id="top_n" class="input" type="number" value="30" min="5" max="200"></div>
+</div>
+<button class="btn btn-p" onclick="runScreener()">🔍 开始筛选</button></div>
+<div id="screen-loading" style="display:none;text-align:center;padding:20px"><span class="spin"></span><span style="margin-left:8px;color:var(--mu-fg);font-size:13px">筛选中...</span></div>
+<div id="screen-error" style="display:none" class="err"></div>
+<div id="screen-result" style="display:none">
+<div class="card g24"><div class="card-header"><div class="ib ib-e">📋</div><h2>筛选结果</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)" id="screen-count"></span></div>
+<div class="tbl-wrap" style="max-height:520px;overflow-y:auto"><table><thead><tr><th>代码</th><th>名称</th><th class="r">最新价</th><th class="r">涨跌幅</th><th class="r">换手率</th><th class="r">市盈率</th><th class="r">市净率</th><th class="r">量比</th><th class="r">总市值</th></tr></thead>
+<tbody id="screen-tbody"></tbody></table></div></div></div>
+
+</main>
+<script>
+function fm(v,d){if(v==null||isNaN(v))return"--";d=d!=null?d:2;return Number(v).toFixed(d)}
+function fv(v){if(v==null||isNaN(v))return"--";var a=Math.abs(v);if(a>=1e12)return(v/1e12).toFixed(2)+"万亿";if(a>=1e8)return(v/1e8).toFixed(2)+"亿";if(a>=1e4)return(v/1e4).toFixed(2)+"万";return Number(v).toFixed(0)}
+function pf(v){if(v==null||isNaN(v))return"--";return(v>=0?"+":"")+v.toFixed(2)+"%"}
+function pc(v){if(v==null||isNaN(v))return"mu";return v>0?"up":v<0?"dn":"mu"}
+function scoreColor(s){if(s>=70)return"#10B981";if(s>=50)return"#4F46E5";if(s>=30)return"#F59E0B";return"#94A3B8"}
+async function runFactor(){
+var top=document.getElementById("ftop").value||30,mc=document.getElementById("fmc").value||10;
+var ld=document.getElementById("factor-loading"),er=document.getElementById("factor-error"),rd=document.getElementById("factor-result");
+rd.style.display="none";er.style.display="none";ld.style.display="block";
+try{var r=await fetch("/api/factor_screener",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({top_n:parseInt(top),min_market_cap:parseFloat(mc)})});var d=await r.json();ld.style.display="none";
+if(d.error){er.style.display="block";er.textContent=typeof d.error==="string"?d.error:(d.message||"Error");return}
+var items=d.data||[],meta=d.meta||{};if(!items.length){er.style.display="block";er.textContent="暂无符合条件的股票（数据源: "+(meta.source||"N/A")+"）";return}
+document.getElementById("factor-meta").textContent="数据源: "+(meta.source||"N/A")+" · 扫描: "+(meta.scanned||0)+"只";
+document.getElementById("factor-count").textContent="共 "+items.length+" 只";
+document.getElementById("factor-tbody").innerHTML=items.map(function(s){return'<tr><td class="cm">'+s["代码"]+'</td><td class="nm">'+s["名称"]+'</td><td class="pr">'+fm(s["最新价"],2)+'</td><td class="'+pc(s["涨跌幅"])+'">'+pf(s["涨跌幅"])+'</td><td class="mu">'+fv(s["成交额"])+'</td><td class="r" style="font-weight:700"><span style="color:'+scoreColor(s["综合评分"])+'">'+s["综合评分"]+'</span><span class="score-bar"><span class="score-bar-fill" style="width:'+(s["综合评分"]||0)+'%;background:'+scoreColor(s["综合评分"])+'"></span></span></td><td class="mu">'+(s["动量得分"]||0)+'</td><td class="mu">'+(s["增长得分"]||0)+'</td></tr>'}).join("");rd.style.display="block"}catch(e){ld.style.display="none";er.style.display="block";er.textContent=e.message}}
+
+async function runScreener(){
+var p={top_n:parseInt(document.getElementById("top_n").value)||30};
+var fieldIds=["min_gain","max_gain","min_turnover","min_volume_ratio","max_pe","max_pb","min_market_cap","min_roe"];fieldIds.forEach(function(id){var v=document.getElementById(id).value;if(v!==""&&v!==null)p[id]=parseFloat(v)});
+var ld=document.getElementById("screen-loading"),er=document.getElementById("screen-error"),rd=document.getElementById("screen-result");
+rd.style.display="none";er.style.display="none";ld.style.display="block";
+try{var r=await fetch("/api/screener",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});var d=await r.json();ld.style.display="none";
+if(d.error){er.style.display="block";er.textContent=typeof d.error==="string"?d.error:(d.message||"Error");return}
+var items=d.data||[],meta=d.meta||{};if(!items.length){er.style.display="block";er.textContent="暂无匹配结果（扫描: "+(meta.scanned||0)+"只）";return}
+document.getElementById("screen-count").textContent="共 "+items.length+" 只（扫描: "+(meta.scanned||0)+"只）";
+document.getElementById("screen-tbody").innerHTML=items.map(function(s){return'<tr><td class="cm">'+s["代码"]+'</td><td class="nm">'+s["名称"]+'</td><td class="pr">'+fm(s["最新价"],2)+'</td><td class="'+pc(s["涨跌幅"])+'">'+pf(s["涨跌幅"])+'</td><td class="mu">'+(s["换手率"]!=null?fm(s["换手率"],2)+"%":"--")+'</td><td class="mu">'+fm(s["市盈率"],1)+'</td><td class="mu">'+fm(s["市净率"],1)+'</td><td class="mu">'+fm(s["量比"],1)+'</td><td class="mu">'+fv(s["总市值"])+'</td></tr>'}).join("");rd.style.display="block"}catch(e){ld.style.display="none";er.style.display="block";er.textContent=e.message}}
+</script>
+</body>
+</html>

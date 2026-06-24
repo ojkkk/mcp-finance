@@ -196,13 +196,18 @@ def factor_screener(
         return {"error": True, "message": "全市场数据为空"}
 
     import pandas as pd
-    df = snapshot if isinstance(snapshot, pd.DataFrame) else pd.DataFrame()
+    if isinstance(snapshot, pd.DataFrame):
+        df = snapshot
+    elif isinstance(snapshot, list):
+        df = pd.DataFrame(snapshot)
+    else:
+        df = pd.DataFrame()
 
     scored = []
     for _, row in df.iterrows():
         try:
-            code = str(row.get("f12", ""))
-            name = str(row.get("f14", ""))
+            code = str(row.get("代码", row.get("f12", "")))
+            name = str(row.get("名称", row.get("f14", "")))
             if not code or len(code) != 6:
                 continue
             # 排除ST/新股
@@ -210,15 +215,19 @@ def factor_screener(
                 continue
 
             # 提取因子
-            gain = float(row.get("f3", 0) or 0)  # 涨跌幅
-            pe = float(row.get("f9", 0) or 0)     # 市盈率
-            pb = float(row.get("f23", 99) or 99)   # 市净率
-            turnover = float(row.get("f8", 0) or 0) # 换手率
-            volume_ratio = float(row.get("f10", 1) or 1) # 量比
-            market_cap = float(row.get("f20", 0) or 0) # 总市值(亿)
+            gain = float(row.get("涨跌幅", row.get("f3", 0) or 0) or 0)  # 涨跌幅
+            pe = float(row.get("市盈率", row.get("f9", 0) or 0) or 0)     # 市盈率
+            pb = float(row.get("市净率", row.get("f23", 99) or 99) or 99)   # 市净率
+            turnover = float(row.get("换手率", row.get("f8", 0) or 0) or 0) # 换手率
+            volume_ratio = float(row.get("量比", row.get("f10", 1) or 1) or 1) # 量比
+            raw_mc = float(row.get("总市值", row.get("f20", 0) or 0) or 0); market_cap = raw_mc / 1e8 if raw_mc > 1e8 else 0 # 总市值(亿)
 
-            # 过滤小市值
-            if market_cap < min_market_cap:
+            # 过滤: use 成交额 (amount) as liquidity proxy when mcap unavailable
+            if market_cap > 0 and market_cap < min_market_cap:
+                continue
+            # Also accept stocks with high volume as liquid
+            amount = float(row.get("成交额", 0) or 0)
+            if market_cap <= 0 and amount < min_market_cap * 1e7:
                 continue
 
             # 因子得分 (0-100)
@@ -226,7 +235,7 @@ def factor_screener(
             m_score = min(100, max(0, 50 + gain * 5 + (volume_ratio - 1) * 20))
 
             # value: PE越低越好，PB越低越好
-            v_score = 0
+            v_score = 50  # neutral when no data
             if 0 < pe < 200 and 0 < pb < 20:
                 v_score = min(100, max(0, 100 - pe * 0.8 - pb * 2))
             elif 0 < pe < 200:
@@ -262,7 +271,7 @@ def factor_screener(
             scored.append({
                 "代码": code,
                 "名称": name,
-                "最新价": float(row.get("f2", 0) or 0),
+                "最新价": float(row.get("最新价", row.get("f2", 0) or 0) or 0),
                 "涨跌幅(%)": gain,
                 "市盈率": pe,
                 "市净率": pb,
@@ -405,3 +414,5 @@ def _compute_stock_score(quote: dict, tech: dict, financials: dict) -> dict:
         "等级": level,
         "关键因素": reasons[:5],
     }
+
+
