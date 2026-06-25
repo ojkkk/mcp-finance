@@ -28,7 +28,7 @@ from mcp_finance import __version__
 from mcp_finance.api import handle_realtime_quote, handle_kline, handle_financials, handle_market_indices, handle_sector_ranking, handle_north_flow, handle_batch_quotes, handle_dragon_tiger, handle_block_trades, handle_margin_trading, handle_futures_list, handle_test_data_sources
 from mcp_finance.indicators import handle_technical_indicators
 from mcp_finance.screener import handle_stock_screener
-from mcp_finance.backtest import handle_backtest, handle_optimize
+from mcp_finance.backtest import handle_backtest, handle_optimize, handle_walk_forward, handle_monte_carlo
 from mcp_finance.chart import handle_plot_kline, handle_comparison_chart
 from mcp_finance.portfolio import handle_correlation_matrix, handle_portfolio_backtest
 from mcp_finance.analysis import handle_analyze_stock, handle_compare_stocks, handle_factor_screener
@@ -89,6 +89,8 @@ TOOL_HANDLERS["get_technical_indicators"] = handle_technical_indicators
 TOOL_HANDLERS["stock_screener"] = handle_stock_screener
 TOOL_HANDLERS["backtest_strategy"] = handle_backtest
 TOOL_HANDLERS["optimize_strategy"] = handle_optimize
+TOOL_HANDLERS["walk_forward"] = handle_walk_forward
+TOOL_HANDLERS["monte_carlo_test"] = handle_monte_carlo
 TOOL_HANDLERS["plot_kline"] = handle_plot_kline
 TOOL_HANDLERS["comparison_chart"] = handle_comparison_chart
 TOOL_HANDLERS["get_dragon_tiger"] = handle_dragon_tiger
@@ -603,7 +605,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 sys.stdout = old_stdout
 
         # optimize_strategy 需要更长时间
-        timeout = 180.0 if name == "optimize_strategy" else 120.0 if name == "backtest_strategy" else 90.0
+        timeout = 300.0 if name == "walk_forward" else 180.0 if name == "optimize_strategy" else 120.0 if name == "backtest_strategy" else 90.0
         result = await asyncio.wait_for(asyncio.to_thread(_safe_handler), timeout=timeout)
         return [types.TextContent(type="text", text=_format_json(result))]
     except asyncio.TimeoutError:

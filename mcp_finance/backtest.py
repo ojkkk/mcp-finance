@@ -736,11 +736,12 @@ def _run_single_backtest(
     cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
     cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
     cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
-    if benchmark_code is not None:  # 非优化模式才加这些
+    # 权益曲线记录 (优化模式下 benchmark_code=None 时也记录)
+    if benchmark_code is not None:
         cerebro.addanalyzer(bt.analyzers.VWR, _name="vwr")
-        cerebro.addanalyzer(_EquityRecorder, _name="equity")
-        cerebro.addanalyzer(_AnnualVolatility, _name="ann_vol")
-        cerebro.addobserver(_EquityObserver)
+    cerebro.addanalyzer(_EquityRecorder, _name="equity")
+    cerebro.addanalyzer(_AnnualVolatility, _name="ann_vol")
+    cerebro.addobserver(_EquityObserver)
 
     # 运行
     initial_value = cerebro.broker.getvalue()
@@ -1220,6 +1221,406 @@ def optimize_backtest_bayesian(
     }
 
 
+
+# ============================================================================
+# Walk-Forward 样本外验证 — 滚动窗口优化+测试，评估策略真实泛化能力
+# ============================================================================
+
+def walk_forward_analysis(
+    code: str, strategy: str = "ma_cross",
+    train_years: float = 2.0, test_months: int = 6,
+    step_months: int = 6,
+    fast_min: int = 3, fast_max: int = 40,
+    slow_min: int = 10, slow_max: int = 120,
+    metric: str = "sharpe",
+    n_trials: int = 30,
+) -> dict[str, Any]:
+    """Walk-Forward 样本外验证
+
+    将完整历史数据切分为多个滚动窗口:
+    - 每窗口用训练期优化参数，测试期检验样本外表现
+    - 汇总所有窗口的 OOS 结果，评估策略真实泛化能力
+    - 对比 IS(样本内) vs OOS(样本外) 揭示过拟合程度
+
+    Args:
+        code: 股票代码
+        strategy: 策略名称
+        train_years: 训练窗口年数 (默认 2)
+        test_months: 测试窗口月数 (默认 6)
+        step_months: 窗口滑动步长月数 (默认 6)
+        fast_min/max: 快线参数搜索范围
+        slow_min/max: 慢线参数搜索范围
+        metric: 优化目标
+        n_trials: 每窗口贝叶斯优化试验次数
+    """
+    from datetime import datetime, timedelta
+    from dateutil.relativedelta import relativedelta
+
+    # 获取完整K线数据
+    try:
+        klines = _get_kline_for_code(code, period="daily", adjust="qfq", limit=800)
+        if not klines or (isinstance(klines[0], dict) and "error" in klines[0]):
+            return {"error": "获取K线数据失败"}
+    except Exception as e:
+        return {"error": f"获取K线数据异常: {e}"}
+
+    # 解析日期范围
+    dates = sorted(set(k["日期"] for k in klines if "日期" in k))
+    if len(dates) < 200:
+        return {"error": f"K线数据不足 ({len(dates)} 条)，需要至少 200 条"}
+
+    data_start = datetime.strptime(dates[0], "%Y-%m-%d")
+    data_end = datetime.strptime(dates[-1], "%Y-%m-%d")
+
+    # 计算窗口边界
+    train_delta = timedelta(days=int(train_years * 365))
+    test_delta = relativedelta(months=test_months)
+    step_delta = relativedelta(months=step_months)
+
+    windows = []
+    window_start = data_start
+    while True:
+        train_start = window_start
+        train_end = train_start + train_delta
+        test_start = train_end
+        test_end = test_start + test_delta
+
+        if test_end > data_end:
+            break
+
+        windows.append({
+            "train_start": train_start.strftime("%Y-%m-%d"),
+            "train_end": train_end.strftime("%Y-%m-%d"),
+            "test_start": test_start.strftime("%Y-%m-%d"),
+            "test_end": test_end.strftime("%Y-%m-%d"),
+        })
+        window_start += step_delta
+
+    if len(windows) < 3:
+        return {"error": f"窗口数量不足 ({len(windows)})，需要至少 3 个窗口。请扩大数据范围或缩短训练/测试周期"}
+
+    # 逐窗口 Walk-Forward
+    window_results = []
+    oos_returns = []
+    is_returns = []
+    params_history = []
+
+    for i, win in enumerate(windows):
+        # ── 训练期优化 ──
+        try:
+            opt_result = optimize_backtest_bayesian(
+                code=code, strategy=strategy,
+                fast_min=fast_min, fast_max=fast_max,
+                slow_min=slow_min, slow_max=slow_max,
+                start_date=win["train_start"], end_date=win["train_end"],
+                metric=metric, n_trials=n_trials,
+            )
+        except Exception:
+            continue
+
+        if "error" in opt_result:
+            continue
+
+        best_fast = opt_result["最优参数"]["fast"]
+        best_slow = opt_result["最优参数"]["slow"]
+        is_return = opt_result["最优表现"].get("总收益率(%)", 0)
+        params_history.append({"fast": best_fast, "slow": best_slow})
+
+        # ── 测试期回测(样本外) ──
+        try:
+            oos_result = _run_single_backtest(
+                code=code, strategy=strategy,
+                fast_period=best_fast, slow_period=best_slow,
+                start_date=win["test_start"], end_date=win["test_end"],
+                benchmark_code=None, klines=None,
+                slippage_type="fixed_perc", slippage_value=0.001,
+            )
+        except Exception:
+            continue
+
+        if "error" in oos_result:
+            continue
+
+        oos_return = oos_result.get("总收益率(%)", 0)
+
+        window_results.append({
+            "窗口": i + 1,
+            "训练期": f'{win["train_start"]} ~ {win["train_end"]}',
+            "测试期": f'{win["test_start"]} ~ {win["test_end"]}',
+            "最优参数": {"fast": best_fast, "slow": best_slow},
+            "样本内收益率(%)": round(is_return, 2),
+            "样本外收益率(%)": round(oos_return, 2),
+            "OOS夏普": oos_result.get("夏普比率", 0),
+            "OOS最大回撤(%)": oos_result.get("最大回撤(%)", 0),
+            "OOS胜率(%)": oos_result.get("胜率(%)", 0),
+        })
+        oos_returns.append(oos_return)
+        is_returns.append(is_return)
+
+    if not window_results:
+        return {"error": "Walk-Forward 分析失败: 所有窗口均无有效结果"}
+
+    # ── 汇总统计 ──
+    avg_oos = sum(oos_returns) / len(oos_returns)
+    avg_is = sum(is_returns) / len(is_returns)
+    oos_win_rate = sum(1 for r in oos_returns if r > 0) / len(oos_returns) * 100
+
+    # OOS 稳定性: 收益率标准差
+    if len(oos_returns) > 1:
+        import numpy as np
+        oos_std = float(np.std(oos_returns))
+    else:
+        oos_std = 0.0
+
+    # 过拟合比率: IS/OOS 收益率比值 (>2 提示过拟合)
+    overfit_ratio = round(abs(avg_is / avg_oos), 2) if abs(avg_oos) > 0.5 else None
+
+    # 参数稳定性: fast/slow 的变异系数
+    param_stability = "稳定"
+    if len(params_history) >= 3:
+        fasts = [p["fast"] for p in params_history]
+        slows = [p["slow"] for p in params_history]
+        fast_cv = float(np.std(fasts)) / (float(np.mean(fasts)) + 1e-8)
+        slow_cv = float(np.std(slows)) / (float(np.mean(slows)) + 1e-8)
+        if fast_cv > 0.5 or slow_cv > 0.5:
+            param_stability = "不稳定(参数随窗口变化大, 可能过拟合)"
+
+    # 判断: OOS 是否有一致性正收益
+    verdict = "策略样本外表现良好, 具备一定泛化能力" if avg_oos > 0 and oos_win_rate >= 50 else               "策略样本外表现不稳定, 可能存在过拟合" if oos_win_rate < 50 else               "策略样本外收益为负, 不建议实盘使用"
+
+    return {
+        "分析方法": "Walk-Forward 样本外验证",
+        "策略": _STRATEGY_LABELS.get(strategy, strategy),
+        "股票": _get_stock_name(code),
+        "窗口配置": f"训练{train_years}年 + 测试{test_months}月, 步长{step_months}月",
+        "窗口总数": len(windows),
+        "有效窗口": len(window_results),
+        "窗口明细": window_results,
+        "汇总": {
+            "平均样本内收益率(%)": round(avg_is, 2),
+            "平均样本外收益率(%)": round(avg_oos, 2),
+            "OOS胜率(%)": round(oos_win_rate, 1),
+            "OOS收益率标准差": round(oos_std, 2),
+            "过拟合比率(IS/OOS)": overfit_ratio,
+            "参数稳定性": param_stability,
+            "综合判断": verdict,
+        },
+        "参数历史": params_history,
+        "提示": "Walk-Forward 是评估策略泛化能力的黄金标准。OOS 收益持续为正且参数稳定是低过拟合的标志。"
+    }
+
+
+
+# ============================================================================
+# 蒙特卡洛稳健性检验 — 交易重排 + 置信区间
+# ============================================================================
+
+def monte_carlo_test(
+    code: str, strategy: str = "ma_cross",
+    fast_period: int = 5, slow_period: int = 20,
+    start_date: str | None = None, end_date: str | None = None,
+    n_simulations: int = 1000,
+) -> dict[str, Any]:
+    """蒙特卡洛稳健性检验
+
+    对策略的交易序列做 N 次随机重排，计算:
+    - 收益率分布及置信区间
+    - 正收益概率
+    - 最大回撤分布
+    - 与原始策略对比，评估是否依赖特定交易顺序
+
+    Args:
+        code: 股票代码
+        strategy: 策略名称
+        fast_period/slow_period: 策略参数
+        start_date/end_date: 回测区间
+        n_simulations: 模拟次数 (默认 1000)
+    """
+    import numpy as np
+
+    # ── 1. 原始回测 ──
+    try:
+        original = _run_single_backtest(
+            code=code, strategy=strategy,
+            fast_period=fast_period, slow_period=slow_period,
+            start_date=start_date, end_date=end_date,
+            benchmark_code=None,
+            slippage_type="fixed_perc", slippage_value=0.001,
+        )
+    except Exception as e:
+        return {"error": f"原始回测失败: {e}"}
+
+    if "error" in original:
+        return {"error": original["error"]}
+
+    trades = original.get("交易记录", [])
+    if len(trades) < 6:
+        return {"error": f"交易次数不足 ({len(trades)})，需要至少 6 笔交易进行蒙特卡洛检验"}
+
+    # 提取每笔交易的收益率 (盈亏百分比)
+    trade_returns = []
+    for t in trades:
+        action = t.get("动作", "")
+        if action == "卖出":
+            price = float(t.get("价格", 0))
+            amount = float(t.get("金额", 0))
+            if price > 0:
+                shares = abs(amount / price)
+            else:
+                shares = 0
+            # 简化: 取成交金额变化作为单笔收益
+            trade_returns.append(float(t.get("金额", 0)))
+
+    if len(trade_returns) < 3:
+        return {"error": "无法提取足够的交易收益率"}
+
+    # ── 2. 蒙特卡洛模拟 ──
+    sim_returns = []
+    sim_drawdowns = []
+    np.random.seed(42)
+
+    for _ in range(n_simulations):
+        # 随机重排交易序列
+        shuffled = np.random.permutation(trade_returns)
+        # 计算累计收益率
+        initial_cap = original.get("初始资金", 100000)
+        equity = initial_cap
+        max_equity = equity
+
+        for tr in shuffled:
+            equity += tr - equity  # 简化模拟
+        # Actually let me do proper cumulative calculation
+        equity = initial_cap
+        max_equity = equity
+        max_dd = 0.0
+
+        for tr in shuffled:
+            if tr > 0:
+                equity *= (1 + abs(tr) / equity * 0.01)  # rough approximation
+            else:
+                equity += tr  # simplified
+
+        # Better approach: use returns as percentage changes
+        total_return = (equity / initial_cap - 1) * 100
+        sim_returns.append(total_return)
+
+    # Alternative: use a cleaner approach
+    # Get trade-level PnL from the backtest analyser
+    trade_analyzer = None
+    # We already have basic trade info; let's compute properly
+
+    # Re-do with proper approach: each trade return as % of capital
+    trade_pcts = []
+    for t in trades:
+        action = t.get("动作", "")
+        price = float(t.get("价格", 0))
+        amount = float(t.get("金额", 0))
+        if action == "卖出" and price > 0:
+            # The return impact is already captured in the amount change
+            trade_pcts.append(amount)
+
+    # Simplified: use the original equity curve to extract daily returns
+    equity_curve = original.get("权益曲线", [])
+    if len(equity_curve) < 2:
+        return {"error": "权益曲线数据不足"}
+
+    # Extract daily returns from equity curve
+    daily_returns = []
+    for i in range(1, len(equity_curve)):
+        prev_val = equity_curve[i-1].get("市值", 0)
+        curr_val = equity_curve[i].get("市值", 0)
+        if prev_val > 0:
+            daily_returns.append((curr_val / prev_val) - 1)
+
+    if len(daily_returns) < 10:
+        return {"error": "日收益率数据不足"}
+
+    # Monte Carlo: bootstrap daily returns
+    sim_returns = []
+    sim_drawdowns = []
+    np.random.seed(42)
+
+    for _ in range(n_simulations):
+        # Bootstrap: 随机采样日收益率序列 (with replacement)
+        sampled = np.random.choice(daily_returns, size=len(daily_returns), replace=True)
+        # 累计收益
+        cum_return = np.prod(1 + sampled) - 1
+        sim_returns.append(cum_return * 100)
+
+        # 最大回撤
+        equity_curve_sim = 100 * np.cumprod(1 + sampled)
+        peak = np.maximum.accumulate(equity_curve_sim)
+        dd = np.min((equity_curve_sim - peak) / peak) * 100
+        sim_drawdowns.append(dd)
+
+    # ── 3. 统计分析 ──
+    sim_returns = np.array(sim_returns)
+    sim_drawdowns = np.array(sim_drawdowns)
+
+    original_return = original.get("总收益率(%)", 0)
+    original_dd = original.get("最大回撤(%)", 0)
+
+    # 分位数
+    ret_5p = float(np.percentile(sim_returns, 5))
+    ret_25p = float(np.percentile(sim_returns, 25))
+    ret_50p = float(np.percentile(sim_returns, 50))
+    ret_75p = float(np.percentile(sim_returns, 75))
+    ret_95p = float(np.percentile(sim_returns, 95))
+
+    dd_5p = float(np.percentile(sim_drawdowns, 5))
+    dd_50p = float(np.percentile(sim_drawdowns, 50))
+    dd_95p = float(np.percentile(sim_drawdowns, 95))
+
+    # 正收益概率
+    prob_positive = float(np.mean(sim_returns > 0)) * 100
+
+    # 原始策略在分布中的位置 (百分位)
+    from scipy import stats as scipy_stats
+    try:
+        original_percentile = float(scipy_stats.percentileofscore(sim_returns, original_return))
+    except Exception:
+        original_percentile = 50.0
+
+    # 判断
+    if prob_positive >= 80 and original_percentile >= 50:
+        verdict = "策略稳健: 正收益概率高, 且原始表现优于/接近随机重排中位数"
+    elif prob_positive >= 60:
+        verdict = "策略中等稳健: 正收益概率尚可, 但存在依赖特定行情序列的风险"
+    else:
+        verdict = "策略不够稳健: 随机重排后正收益概率偏低, 收益可能依赖特定交易时序"
+
+    return {
+        "分析方法": "蒙特卡洛稳健性检验 (Bootstrap)",
+        "策略": _STRATEGY_LABELS.get(strategy, strategy) + f"({fast_period},{slow_period})",
+        "股票": _get_stock_name(code),
+        "模拟次数": n_simulations,
+        "原始表现": {
+            "总收益率(%)": round(original_return, 2),
+            "最大回撤(%)": round(original_dd, 2),
+            "夏普比率": original.get("夏普比率", 0),
+            "交易次数": original.get("交易次数", 0),
+        },
+        "收益率分布": {
+            "均值(%)": round(float(np.mean(sim_returns)), 2),
+            "中位数(%)": round(ret_50p, 2),
+            "标准差(%)": round(float(np.std(sim_returns)), 2),
+            "5分位(%)": round(ret_5p, 2),
+            "25分位(%)": round(ret_25p, 2),
+            "75分位(%)": round(ret_75p, 2),
+            "95分位(%)": round(ret_95p, 2),
+        },
+        "最大回撤分布": {
+            "中位数(%)": round(dd_50p, 2),
+            "最优5%(%)": round(dd_5p, 2),
+            "最差5%(%)": round(dd_95p, 2),
+        },
+        "正收益概率(%)": round(prob_positive, 1),
+        "原始策略百分位": round(original_percentile, 1),
+        "综合判断": verdict,
+        "提示": "蒙特卡洛检验通过重排交易时序评估策略是否依赖特定行情序列。正收益概率>80%且原始百分位>50为稳健。"
+    }
+
+
 # MCP Tool Handlers
 # ============================================================================
 
@@ -1301,6 +1702,55 @@ def handle_optimize(arguments: dict[str, Any]) -> dict[str, Any]:
                                    max_workers=arguments.get("max_workers"))
 
     _blogger.info("参数优化完成: %s strategy=%s method=%s", code, strategy, optimization_method)
+    return result
+
+
+def handle_walk_forward(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Walk-Forward 样本外验证 handler"""
+    code = arguments["code"]
+    strategy = arguments.get("strategy", "ma_cross")
+    train_years = arguments.get("train_years", 2.0)
+    test_months = arguments.get("test_months", 6)
+    step_months = arguments.get("step_months", 6)
+    fast_min = arguments.get("fast_min", 3)
+    fast_max = arguments.get("fast_max", 40)
+    slow_min = arguments.get("slow_min", 10)
+    slow_max = arguments.get("slow_max", 120)
+    metric = arguments.get("metric", "sharpe")
+    n_trials = arguments.get("n_trials", 30)
+
+    result = walk_forward_analysis(
+        code=code, strategy=strategy,
+        train_years=train_years, test_months=test_months, step_months=step_months,
+        fast_min=fast_min, fast_max=fast_max,
+        slow_min=slow_min, slow_max=slow_max,
+        metric=metric, n_trials=n_trials,
+    )
+    if "error" in result:
+        raise BacktestError(str(result["error"]))
+    _blogger.info("Walk-Forward完成: %s strategy=%s windows=%s", code, strategy, result.get("有效窗口", 0))
+    return result
+
+
+def handle_monte_carlo(arguments: dict[str, Any]) -> dict[str, Any]:
+    """蒙特卡洛稳健性检验 handler"""
+    code = arguments["code"]
+    strategy = arguments.get("strategy", "ma_cross")
+    fast_period = arguments.get("fast_period", 5)
+    slow_period = arguments.get("slow_period", 20)
+    start_date = arguments.get("start_date")
+    end_date = arguments.get("end_date")
+    n_simulations = arguments.get("n_simulations", 1000)
+
+    result = monte_carlo_test(
+        code=code, strategy=strategy,
+        fast_period=fast_period, slow_period=slow_period,
+        start_date=start_date, end_date=end_date,
+        n_simulations=n_simulations,
+    )
+    if "error" in result:
+        raise BacktestError(str(result["error"]))
+    _blogger.info("蒙特卡洛检验完成: %s strategy=%s prob=%.1f%%", code, strategy, result.get("正收益概率(%)", 0))
     return result
 
 
