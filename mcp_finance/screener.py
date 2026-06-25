@@ -9,7 +9,11 @@
   - ROE（净资产收益率，通过 AKShare 财务缓存获取）
   - 主力净流入（通过 easy-tdx 实时行情获取）
 
-数据来源: 东方财富全市场行情接口 (push2.eastmoney.com) + AKShare 财务指标 + easy-tdx
+数据源优先级:
+  1. AKShare 东方财富全市场行情 (stock_zh_a_spot) — 主数据源
+  2. AKShare 财务摘要 (stock_financial_abstract) — ROE 等指标
+  3. easy-tdx — 主力净流入
+  注意: Tushare 不用于选股器（免费版限频 1次/分钟，远不足以支撑全市场扫描）
 """
 
 from __future__ import annotations
