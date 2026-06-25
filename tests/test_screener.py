@@ -36,8 +36,8 @@ class TestScreenerFiltering:
 
         assert result["count"] > 0
         for stock in result["matched"]:
-            assert stock["涨跌幅(%)"] is not None
-            assert stock["涨跌幅(%)"] >= 3.0
+            assert stock["涨跌幅"] is not None
+            assert stock["涨跌幅"] >= 3.0
 
     @patch("mcp_finance.screener._fetch_all_a_stocks")
     def test_max_pe_filter(self, mock_fetch):
@@ -46,8 +46,8 @@ class TestScreenerFiltering:
         result = screen_stocks(max_pe=50)
 
         for stock in result["matched"]:
-            assert stock["市盈率(动)"] is not None
-            assert stock["市盈率(动)"] <= 50
+            assert stock["市盈率"] is not None
+            assert stock["市盈率"] <= 50
 
     @patch("mcp_finance.screener._fetch_all_a_stocks")
     def test_min_roe_filter(self, mock_fetch):
@@ -56,8 +56,8 @@ class TestScreenerFiltering:
         result = screen_stocks(min_roe=20)
 
         for stock in result["matched"]:
-            assert stock["ROE(%)"] is not None
-            assert stock["ROE(%)"] >= 20
+            assert stock["ROE"] is not None
+            assert stock["ROE"] >= 20
 
     @patch("mcp_finance.screener._fetch_all_a_stocks")
     def test_multi_condition(self, mock_fetch):
@@ -66,9 +66,9 @@ class TestScreenerFiltering:
         result = screen_stocks(min_gain=2.0, max_pe=50, min_roe=15, min_pb=1.0)
 
         for stock in result["matched"]:
-            assert stock["涨跌幅(%)"] >= 2.0
-            assert stock["市盈率(动)"] <= 50
-            assert stock["ROE(%)"] >= 15
+            assert stock["涨跌幅"] >= 2.0
+            assert stock["市盈率"] <= 50
+            assert stock["ROE"] >= 15
 
     @patch("mcp_finance.screener._fetch_all_a_stocks")
     def test_result_structure(self, mock_fetch):
@@ -82,7 +82,7 @@ class TestScreenerFiltering:
         for stock in result["matched"]:
             assert "代码" in stock
             assert "名称" in stock
-            assert "涨跌幅(%)" in stock
+            assert "涨跌幅" in stock
 
     @patch("mcp_finance.screener._fetch_all_a_stocks")
     def test_empty_result(self, mock_fetch):
@@ -98,7 +98,7 @@ class TestScreenerFiltering:
         mock_fetch.return_value = MOCK_STOCKS
         result = screen_stocks()
         if len(result["matched"]) >= 2:
-            gains = [s["涨跌幅(%)"] for s in result["matched"] if s["涨跌幅(%)"] is not None]
+            gains = [s["涨跌幅"] for s in result["matched"] if s["涨跌幅"] is not None]
             assert gains == sorted(gains, reverse=True)
 
     @patch("mcp_finance.screener._fetch_all_a_stocks")
@@ -141,7 +141,7 @@ class TestHandlerFunctions:
         result = handle_stock_screener({"min_gain": 5.0})
         assert result["count"] > 0
         for stock in result["matched"]:
-            assert stock["涨跌幅(%)"] >= 5.0
+            assert stock["涨跌幅"] >= 5.0
 
     @patch("mcp_finance.screener._fetch_all_a_stocks")
     def test_handle_empty_raises(self, mock_fetch):
