@@ -19,7 +19,7 @@ from mcp_finance.api import (
     handle_sector_ranking, get_all_a_stocks_snapshot,
 )
 from mcp_finance.screener import handle_stock_screener
-from mcp_finance.backtest import handle_backtest
+from mcp_finance.backtest import handle_backtest, handle_optimize, handle_walk_forward, handle_monte_carlo
 from mcp_finance.data import HOT_STOCKS, STOCK_MAPPING
 try:
     from mcp_finance.tushare_source import is_available as _ts_available, get_financial_indicators_batch as _ts_fin_batch
@@ -541,9 +541,46 @@ def api_backtest():
     }
     if d.get("fast_period"): args["fast_period"] = int(d["fast_period"])
     if d.get("slow_period"): args["slow_period"] = int(d["slow_period"])
+    if d.get("slippage_type"): args["slippage_type"] = d["slippage_type"]
+    if d.get("slippage_value"): args["slippage_value"] = float(d["slippage_value"])
+    if d.get("strategy_config"): args["strategy_config"] = d["strategy_config"]
+    if d.get("optimization_method"): args["optimization_method"] = d["optimization_method"]
+    if d.get("n_trials"): args["n_trials"] = int(d["n_trials"])
 
     result = _safe_call(handle_backtest, args)
     return jsonify(result)
+
+
+@app.route("/api/optimize", methods=["POST"])
+def api_optimize():
+    d = request.get_json(silent=True) or {}
+    args = {"code": d.get("code","000001"), "strategy": d.get("strategy","ma_cross"),
+            "optimization_method": d.get("optimization_method","bayesian"), "metric": d.get("metric","sharpe")}
+    for k in ("fast_min","fast_max","slow_min","slow_max","fast_step","slow_step","n_trials"):
+        if k in d: args[k] = int(d[k])
+    if d.get("start_date"): args["start_date"] = d["start_date"]
+    if d.get("end_date"): args["end_date"] = d["end_date"]
+    return jsonify(_safe_call(handle_optimize, args))
+
+
+@app.route("/api/walk_forward", methods=["POST"])
+def api_walk_forward():
+    d = request.get_json(silent=True) or {}
+    args = {"code": d.get("code","000001"), "strategy": d.get("strategy","ma_cross")}
+    for k in ("train_years","test_months","step_months","fast_min","fast_max","slow_min","slow_max","n_trials"):
+        if k in d: args[k] = float(d[k]) if k == "train_years" else int(d[k])
+    return jsonify(_safe_call(handle_walk_forward, args))
+
+
+@app.route("/api/monte_carlo", methods=["POST"])
+def api_monte_carlo():
+    d = request.get_json(silent=True) or {}
+    args = {"code": d.get("code","000001"), "strategy": d.get("strategy","ma_cross")}
+    for k in ("fast_period","slow_period","n_simulations"):
+        if k in d: args[k] = int(d[k])
+    if d.get("start_date"): args["start_date"] = d["start_date"]
+    if d.get("end_date"): args["end_date"] = d["end_date"]
+    return jsonify(_safe_call(handle_monte_carlo, args))
 
 
 # ═══════════════ Entry ═══════════════

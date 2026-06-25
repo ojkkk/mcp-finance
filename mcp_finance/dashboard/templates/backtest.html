@@ -5,30 +5,49 @@
 <title>mcp-finance · 策略回测</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <link rel="stylesheet" href="/static/common.css">
+<style>
+.tabs{display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--bd)}
+.tab{padding:10px 20px;cursor:pointer;font-size:14px;font-weight:600;color:var(--mu-fg);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}
+.tab:hover{color:var(--pri)}
+.tab.active{color:var(--pri);border-bottom-color:var(--pri)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.cfg-row{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
+.cfg-row>div{min-width:120px}
+</style>
 </head>
 <body class="antialiased">
 <header class="app-header"><div class="header-inner">
 <a href="/" class="logo"><div class="logo-icon">M</div><span class="logo-text">mcp<span class="logo-sub">-finance</span></span></a>
 <nav class="nav-group"><a href="/" class="nav-item">行情</a><a href="/screener" class="nav-item">选股</a><a href="/backtest" class="nav-item active">回测</a></nav>
-<div class="status"><span class="live-dot"></span>策略引擎</div>
+<div class="status"><span class="live-dot"></span>策略引擎 v0.12</div>
 </div></header>
 <main class="fade-in">
 
-<div class="card g24"><div class="card-header"><div class="ib ib-i">⚙️</div><h2>回测配置</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">8 种策略 · Backtrader 引擎</span></div>
+<div class="tabs">
+<div class="tab active" onclick="switchTab('backtest')">📊 策略回测</div>
+<div class="tab" onclick="switchTab('optimize')">🔍 参数优化</div>
+<div class="tab" onclick="switchTab('walkforward')">🔬 Walk-Forward</div>
+<div class="tab" onclick="switchTab('montecarlo')">🎲 蒙特卡洛</div>
+</div>
+
+<!-- Tab 1: Backtest -->
+<div id="tab-backtest" class="tab-content active">
+<div class="card g24"><div class="card-header"><div class="ib ib-i">⚙️</div><h2>回测配置</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">9种策略 · 4种滑点 · Backtrader引擎</span></div>
 <div class="form-grid-bt g16">
 <div><div class="fl">股票代码</div><input id="bc" class="input" type="text" value="600519" placeholder="如 600519"></div>
-<div><div class="fl">策略</div><select id="bs" class="input"><option value="ma_cross">双均线 MA</option><option value="macd_signal">MACD 信号</option><option value="rsi_signal">RSI 信号</option><option value="kdj_signal">KDJ 信号</option><option value="boll_signal">布林 BOLL</option><option value="turtle">海龟交易</option><option value="vol_trend">波动率趋势</option><option value="mean_rev">均值回归</option></select></div>
+<div><div class="fl">策略</div><select id="bs" class="input"><option value="ma_cross">双均线 MA</option><option value="macd_signal">MACD 信号</option><option value="rsi_signal">RSI 信号</option><option value="kdj_signal">KDJ 信号</option><option value="boll_signal">布林 BOLL</option><option value="turtle">海龟交易</option><option value="vol_trend">波动率趋势</option><option value="mean_rev">均值回归</option><option value="custom">自定义组合</option></select></div>
 <div><div class="fl">开始日期</div><input id="bsd" class="input" type="date" value="2025-01-01"></div>
 <div><div class="fl">结束日期</div><input id="bed" class="input" type="date" value="2026-06-24"></div>
 <div><div class="fl">快线周期</div><input id="bf" class="input" type="number" value="5" min="2" max="200"></div>
 <div><div class="fl">慢线周期</div><input id="bsl" class="input" type="number" value="20" min="5" max="300"></div>
 <div><div class="fl">初始资金</div><input id="bcp" class="input" type="number" value="200000" min="10000" step="10000"></div>
+<div><div class="fl">滑点模型</div><select id="bslip" class="input"><option value="fixed_perc">固定百分比(千1)</option><option value="fixed_points">固定点数</option><option value="bar_impact">Bar冲击</option><option value="volume_share">成交量份额</option></select></div>
+<div><div class="fl">滑点值</div><input id="bslipv" class="input" type="number" value="0.001" min="0" max="0.1" step="0.001"></div>
 </div>
 <button id="bbtn" class="btn btn-p" onclick="runBacktest()">▶ 开始回测</button></div>
-
 <div id="bl" style="display:none" class="card g24"><div style="text-align:center;padding:32px 0;color:var(--mu-fg);font-size:14px"><span class="spin" style="vertical-align:middle;margin-right:10px"></span>回测引擎运行中…</div></div>
 <div id="be" style="display:none" class="card g24"><div class="err" id="be-msg"></div></div>
-
 <div id="br" style="display:none">
 <div class="fg g24" id="bst"></div>
 <div class="card g24"><div class="card-header"><div class="ib ib-v">📈</div><h2>权益曲线</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">策略 vs 买入持有</span></div><div style="width:100%;height:440px" id="bch"></div></div>
@@ -36,34 +55,182 @@
 <div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th>日期</th><th class="c">动作</th><th class="r">价格</th><th class="r">数量</th><th class="r">金额</th><th class="r">盈亏</th></tr></thead><tbody id="btr"></tbody></table></div></div>
 <div id="bsb" style="display:none" class="card"><div class="card-header"><div class="ib ib-a">💡</div><h2>策略解读</h2></div><div id="bsm" class="sum"></div></div>
 </div>
+</div>
+
+<!-- Tab 2: Optimize -->
+<div id="tab-optimize" class="tab-content">
+<div class="card g24"><div class="card-header"><div class="ib ib-i">🔍</div><h2>参数优化</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">网格扫描 / 贝叶斯优化</span></div>
+<div class="form-grid-bt g16">
+<div><div class="fl">股票代码</div><input id="oc" class="input" type="text" value="600519"></div>
+<div><div class="fl">策略</div><select id="os" class="input"><option value="ma_cross">双均线</option><option value="macd_signal">MACD</option><option value="rsi_signal">RSI</option><option value="kdj_signal">KDJ</option><option value="boll_signal">BOLL</option></select></div>
+<div><div class="fl">优化方法</div><select id="om" class="input"><option value="bayesian">贝叶斯 (Bayesian)</option><option value="grid">网格扫描</option></select></div>
+<div><div class="fl">优化目标</div><select id="ome" class="input"><option value="sharpe">夏普比率</option><option value="return">总收益率</option><option value="mdd">最大回撤(最小)</option><option value="win_rate">胜率</option></select></div>
+<div><div class="fl">快线最小值</div><input id="ofmin" class="input" type="number" value="3" min="2" max="100"></div>
+<div><div class="fl">快线最大值</div><input id="ofmax" class="input" type="number" value="30" min="3" max="200"></div>
+<div><div class="fl">慢线最小值</div><input id="osmin" class="input" type="number" value="10" min="5" max="200"></div>
+<div><div class="fl">慢线最大值</div><input id="osmax" class="input" type="number" value="80" min="10" max="300"></div>
+<div><div class="fl">试验次数</div><input id="otr" class="input" type="number" value="50" min="10" max="200"></div>
+</div>
+<button id="obtn" class="btn btn-p" onclick="runOptimize()">🔍 开始优化</button></div>
+<div id="ol" style="display:none" class="card g24"><div style="text-align:center;padding:32px 0;color:var(--mu-fg);font-size:14px"><span class="spin" style="vertical-align:middle;margin-right:10px"></span>优化中（贝叶斯约10s，网格可能更久）…</div></div>
+<div id="or" style="display:none"></div>
+</div>
+
+<!-- Tab 3: Walk-Forward -->
+<div id="tab-walkforward" class="tab-content">
+<div class="card g24"><div class="card-header"><div class="ib ib-i">🔬</div><h2>Walk-Forward 样本外验证</h2></div>
+<div class="form-grid-bt g16">
+<div><div class="fl">股票代码</div><input id="wc" class="input" type="text" value="600519"></div>
+<div><div class="fl">策略</div><select id="ws" class="input"><option value="ma_cross">双均线</option><option value="macd_signal">MACD</option><option value="rsi_signal">RSI</option><option value="kdj_signal">KDJ</option></select></div>
+<div><div class="fl">训练年数</div><input id="wty" class="input" type="number" value="1.5" min="0.5" max="5" step="0.5"></div>
+<div><div class="fl">测试月数</div><input id="wtm" class="input" type="number" value="4" min="1" max="24"></div>
+<div><div class="fl">步长月数</div><input id="wsm" class="input" type="number" value="4" min="1" max="12"></div>
+<div><div class="fl">试验次数/窗口</div><input id="wtr" class="input" type="number" value="20" min="10" max="100"></div>
+</div>
+<button id="wbtn" class="btn btn-p" onclick="runWalkForward()">🔬 开始分析</button></div>
+<div id="wl" style="display:none" class="card g24"><div style="text-align:center;padding:32px 0;color:var(--mu-fg);font-size:14px"><span class="spin" style="vertical-align:middle;margin-right:10px"></span>Walk-Forward 分析中（约 30-60s）…</div></div>
+<div id="wr" style="display:none"></div>
+</div>
+
+<!-- Tab 4: Monte Carlo -->
+<div id="tab-montecarlo" class="tab-content">
+<div class="card g24"><div class="card-header"><div class="ib ib-i">🎲</div><h2>蒙特卡洛稳健性检验</h2></div>
+<div class="form-grid-bt g16">
+<div><div class="fl">股票代码</div><input id="mcc" class="input" type="text" value="600519"></div>
+<div><div class="fl">策略</div><select id="mcs" class="input"><option value="ma_cross">双均线</option><option value="macd_signal">MACD</option><option value="rsi_signal">RSI</option><option value="kdj_signal">KDJ</option></select></div>
+<div><div class="fl">开始日期</div><input id="mcsd" class="input" type="date" value="2025-01-01"></div>
+<div><div class="fl">结束日期</div><input id="mced" class="input" type="date" value="2026-06-24"></div>
+<div><div class="fl">快线周期</div><input id="mcf" class="input" type="number" value="5" min="2" max="200"></div>
+<div><div class="fl">慢线周期</div><input id="mcsl" class="input" type="number" value="20" min="5" max="300"></div>
+<div><div class="fl">模拟次数</div><input id="mcn" class="input" type="number" value="1000" min="100" max="10000" step="100"></div>
+</div>
+<button id="mcbtn" class="btn btn-p" onclick="runMonteCarlo()">🎲 开始检验</button></div>
+<div id="mcl" style="display:none" class="card g24"><div style="text-align:center;padding:32px 0;color:var(--mu-fg);font-size:14px"><span class="spin" style="vertical-align:middle;margin-right:10px"></span>蒙特卡洛模拟中…</div></div>
+<div id="mcr" style="display:none"></div>
+</div>
 
 </main>
 <script>
 function fm(v,d){if(v==null||isNaN(v))return"--";d=d!=null?d:2;return Number(v).toFixed(d)}
 function fv(v){if(v==null||isNaN(v))return"--";var a=Math.abs(v);if(a>=1e12)return(v/1e12).toFixed(2)+"万亿";if(a>=1e8)return(v/1e8).toFixed(2)+"亿";if(a>=1e4)return(v/1e4).toFixed(2)+"万";return Number(v).toFixed(0)}
+function switchTab(name){
+    document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("active",false)});
+    document.querySelectorAll(".tab-content").forEach(function(c){c.classList.toggle("active",false)});
+    document.querySelector(".tab[onclick*=\""+name+"\"]").classList.add("active");
+    document.getElementById("tab-"+name).classList.add("active");
+}
+
+// ── Backtest ──
 async function runBacktest(){
 var b=document.getElementById("bbtn");b.innerHTML='<span class="spin" style="width:16px;height:16px;border-width:2px;margin:0"></span> 回测中…';b.disabled=true;
 document.getElementById("bl").style.display="";document.getElementById("br").style.display="none";document.getElementById("be").style.display="none";
-try{var p={code:document.getElementById("bc").value.trim()||"600519",strategy:document.getElementById("bs").value,initial_capital:parseFloat(document.getElementById("bcp").value)||200000,fast_period:parseInt(document.getElementById("bf").value)||5,slow_period:parseInt(document.getElementById("bsl").value)||20};var sd=document.getElementById("bsd").value,ed=document.getElementById("bed").value;if(sd)p.start_date=sd;if(ed)p.end_date=ed;
+try{var p={code:document.getElementById("bc").value.trim()||"600519",strategy:document.getElementById("bs").value,initial_capital:parseFloat(document.getElementById("bcp").value)||200000,fast_period:parseInt(document.getElementById("bf").value)||5,slow_period:parseInt(document.getElementById("bsl").value)||20,slippage_type:document.getElementById("bslip").value,slippage_value:parseFloat(document.getElementById("bslipv").value)||0.001};var sd=document.getElementById("bsd").value,ed=document.getElementById("bed").value;if(sd)p.start_date=sd;if(ed)p.end_date=ed;
 var r=await fetch("/api/backtest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});var d=await r.json();document.getElementById("bl").style.display="none";
-if(d.error){showError(typeof d.error==="string"?d.error:(d.message||"Unknown"));return}renderResult(d)}catch(e){document.getElementById("bl").style.display="none";showError(e.message)}resetBtn()}
-function showError(m){document.getElementById("be-msg").textContent=m;document.getElementById("be").style.display="";resetBtn()}
-function resetBtn(){var b=document.getElementById("bbtn");b.innerHTML="▶ 开始回测";b.disabled=false}
+if(d.error){showBError(typeof d.error==="string"?d.error:(d.message||"Unknown"));return}renderResult(d)}catch(e){document.getElementById("bl").style.display="none";showBError(e.message)}resetBBtn()}
+function showBError(m){document.getElementById("be-msg").textContent=m;document.getElementById("be").style.display="";resetBBtn()}
+function resetBBtn(){var b=document.getElementById("bbtn");b.innerHTML="▶ 开始回测";b.disabled=false}
 
 function renderResult(d){
 var m=[{l:"累计收益率",k:"总收益率(%)",f:"pct"},{l:"年化收益率",k:"年化收益率(%)",f:"pct"},{l:"最终资金",k:"最终资金",f:"money"},{l:"夏普比率",k:"夏普比率",f:"num"},{l:"最大回撤",k:"最大回撤(%)",f:"pct"},{l:"胜率",k:"胜率(%)",f:"pct"},{l:"交易次数",k:"交易次数",f:"int"},{l:"年化波动率",k:"年化波动率(%)",f:"pct"}];
 document.getElementById("bst").innerHTML=m.map(function(x){var v=d[x.k],vl="--",cl="";if(v!=null){if(x.f==="pct"){vl=(v>=0?"+":"")+fm(v,2)+"%";cl=v>=0?"var(--up)":"var(--dn)"}else if(x.f==="money"){vl="¥"+fv(v);cl="var(--pri)"}else if(x.f==="int"){vl=parseInt(v)}else{vl=fm(v,3)}if(x.k==="最大回撤(%)")cl="var(--dn)"}return'<div class="si"><div class="si-l">'+x.l+'</div><div class="si-v" style="color:'+cl+'">'+vl+'</div></div>'}).join("");
-
 var eq=d["权益曲线"]||d["策略权益曲线"]||[],bm=d["基准(买入持有)"]||{},bmEq=bm["权益曲线"]||[];
 if(eq.length>0){var tr=[{x:eq.map(function(e){return e["日期"]||""}),y:eq.map(function(e){return e["市值"]||e["value"]||0}),type:"scatter",mode:"lines",name:"策略",line:{color:"#4F46E5",width:3},fill:"tozeroy",fillcolor:"rgba(79,70,229,0.05)",hovertemplate:"%{x}<br>¥%{y:,.0f}<extra></extra>"}];if(Array.isArray(bmEq)&&bmEq.length>0)tr.push({x:bmEq.map(function(e){return e["日期"]||""}),y:bmEq.map(function(e){return e["市值"]||e["value"]||0}),type:"scatter",mode:"lines",name:"买入持有",line:{color:"#94A3B8",width:2,dash:"dot"},hovertemplate:"%{x}<br>¥%{y:,.0f}<extra></extra>"});
 var bchEl=document.getElementById("bch");bchEl.style.display="";bchEl.innerHTML="";
 Plotly.newPlot("bch",tr,{margin:{l:75,r:25,t:10,b:50},paper_bgcolor:"#fff",plot_bgcolor:"#F8FAFC",autosize:true,xaxis:{color:"#94A3B8",gridcolor:"#E2E8F0",tickformat:"%m/%d",zeroline:false},yaxis:{color:"#94A3B8",gridcolor:"#E2E8F0",tickformat:",.0f",zeroline:false},legend:{x:0.01,y:0.99,font:{color:"#64748B",size:12},bgcolor:"rgba(255,255,255,0.9)",bordercolor:"#E2E8F0",borderwidth:1}},{responsive:true,displayModeBar:false})}else{document.getElementById("bch").innerHTML='<div class="emp">暂无权益曲线数据</div>'}
-
 var ts=d["交易记录"]||[];
 document.getElementById("btr").innerHTML=ts.length?ts.map(function(t){var dt=t["日期"]||"",act=(t["动作"]||t["买卖"]||""),pr=t["价格"],qty=t["股数"]||t["数量"],amt=t["金额"],pnl=t["盈亏"]||t["盈亏(元)"];var isBuy=act.indexOf("买")>=0;return'<tr><td class="cm">'+dt+'</td><td class="c" style="font-weight:700;color:'+(isBuy?"var(--up)":"var(--dn)")+'">'+act+'</td><td class="r" style="font-weight:500">'+fm(pr,2)+'</td><td class="mu">'+fm(qty,0)+'</td><td class="mu">¥'+fv(amt)+'</td><td class="r" style="font-weight:700;color:'+(pnl!=null?(pnl>=0?"var(--up)":"var(--dn)"):"var(--mu-fg)")+'">'+(pnl!=null?(pnl>=0?"+":"")+fv(pnl):"--")+'</td></tr>'}).join(""):'<tr><td colspan="6"><div class="emp">'+(eq.length?"无交易记录":"数据不足")+'</div></td></tr>';
-
 var s=d["解读"]||"";if(s){document.getElementById("bsm").innerHTML=s.replace(/\n/g,"<br>");document.getElementById("bsb").style.display=""}else{document.getElementById("bsb").style.display="none"}
 document.getElementById("br").style.display="";setTimeout(function(){document.getElementById("br").scrollIntoView({behavior:"smooth"})},100)}
+
+// ── Optimize ──
+async function runOptimize(){
+var b=document.getElementById("obtn");b.innerHTML='<span class="spin" style="width:16px;height:16px;border-width:2px;margin:0"></span> 优化中…';b.disabled=true;
+document.getElementById("ol").style.display="";document.getElementById("or").style.display="none";
+try{var p={code:document.getElementById("oc").value.trim()||"600519",strategy:document.getElementById("os").value,optimization_method:document.getElementById("om").value,metric:document.getElementById("ome").value,fast_min:parseInt(document.getElementById("ofmin").value)||3,fast_max:parseInt(document.getElementById("ofmax").value)||30,slow_min:parseInt(document.getElementById("osmin").value)||10,slow_max:parseInt(document.getElementById("osmax").value)||80,n_trials:parseInt(document.getElementById("otr").value)||50};
+if(document.getElementById("om").value==="grid"){p.fast_step=5;p.slow_step=10}
+var r=await fetch("/api/optimize",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});var d=await r.json();document.getElementById("ol").style.display="none";
+if(d.error){showOError(d.message||"Unknown")}else{renderOptimizeResult(d)}}catch(e){document.getElementById("ol").style.display="none";showOError(e.message)}b.innerHTML="🔍 开始优化";b.disabled=false}
+function showOError(m){document.getElementById("or").style.display="";document.getElementById("or").innerHTML='<div class="card g24"><div class="err">'+m+'</div></div>'}
+function renderOptimizeResult(d){
+var best=d["最优参数"]||{},perf=d["最优表现"]||{},imp=d["参数重要性"]||{},conv=d["收敛曲线"]||[];
+var html='<div class="card g24"><div class="card-header"><div class="ib ib-v">✅</div><h2>优化结果</h2></div>';
+html+='<div class="fg g24">';
+html+='<div class="si"><div class="si-l">优化方法</div><div class="si-v" style="color:var(--pri)">'+(d["优化方法"]||"--")+'</div></div>';
+html+='<div class="si"><div class="si-l">最优参数</div><div class="si-v" style="color:var(--pri)">fast='+best.fast+', slow='+best.slow+'</div></div>';
+html+='<div class="si"><div class="si-l">总收益率</div><div class="si-v">'+(perf["总收益率(%)"]!=null?fm(perf["总收益率(%)"],2)+"%":"--")+'</div></div>';
+html+='<div class="si"><div class="si-l">夏普比率</div><div class="si-v">'+(perf["夏普比率"]!=null?fm(perf["夏普比率"],3):"--")+'</div></div>';
+html+='<div class="si"><div class="si-l">最大回撤</div><div class="si-v" style="color:var(--dn)">'+(perf["最大回撤(%)"]!=null?fm(perf["最大回撤(%)"],2)+"%":"--")+'</div></div>';
+html+='<div class="si"><div class="si-l">胜率</div><div class="si-v">'+(perf["胜率(%)"]!=null?fm(perf["胜率(%)"],1)+"%":"--")+'</div></div>';
+if(Object.keys(imp).length)html+='<div class="si"><div class="si-l">参数重要性</div><div class="si-v">'+Object.entries(imp).map(function(e){return e[0]+":"+fm(e[1]*100,1)+"%"}).join(", ")+'</div></div>';
+html+='<div class="si"><div class="si-l">完成/剪枝</div><div class="si-v">'+(d["完成试验"]||"--")+" / "+(d["剪枝试验"]||"--")+'</div></div>';
+html+='</div></div>';
+
+if(conv.length>20){
+html+='<div class="card g24"><div class="card-header"><h2>收敛曲线</h2></div><div style="width:100%;height:300px" id="oconv"></div></div>';
+setTimeout(function(){Plotly.newPlot("oconv",[{y:conv,type:"scatter",mode:"lines",name:"最优值",line:{color:"#4F46E5",width:2}}],{margin:{l:50,r:20,t:10,b:40},xaxis:{title:"试验次数",color:"#94A3B8"},yaxis:{title:"指标值",color:"#94A3B8"}},{responsive:true,displayModeBar:false})},200)}
+
+var results=d["所有结果"]||[];
+if(results.length){
+html+='<div class="card g24"><div class="card-header"><h2>Top 结果</h2></div><div class="tbl-wrap" style="max-height:400px;overflow-y:auto"><table><thead><tr><th>fast</th><th>slow</th><th class="r">收益率%</th><th class="r">夏普</th><th class="r">回撤%</th><th class="r">胜率%</th></tr></thead><tbody>';
+results.slice(0,15).forEach(function(r){html+='<tr><td>'+r.fast+'</td><td>'+r.slow+'</td><td class="r">'+fm(r["总收益率(%)"],2)+'</td><td class="r">'+fm(r["夏普比率"],3)+'</td><td class="r">'+fm(r["最大回撤(%)"],2)+'</td><td class="r">'+fm(r["胜率(%)"],1)+'</td></tr>'});
+html+='</tbody></table></div></div>'}
+document.getElementById("or").innerHTML=html;document.getElementById("or").style.display=""
+}
+
+// ── Walk-Forward ──
+async function runWalkForward(){
+var b=document.getElementById("wbtn");b.innerHTML='<span class="spin" style="width:16px;height:16px;border-width:2px;margin:0"></span> 分析中…';b.disabled=true;
+document.getElementById("wl").style.display="";document.getElementById("wr").style.display="none";
+try{var p={code:document.getElementById("wc").value.trim()||"600519",strategy:document.getElementById("ws").value,train_years:parseFloat(document.getElementById("wty").value)||1.5,test_months:parseInt(document.getElementById("wtm").value)||4,step_months:parseInt(document.getElementById("wsm").value)||4,n_trials:parseInt(document.getElementById("wtr").value)||20};
+var r=await fetch("/api/walk_forward",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});var d=await r.json();document.getElementById("wl").style.display="none";
+if(d.error){showWError(d.message||"Unknown")}else{renderWFResult(d)}}catch(e){document.getElementById("wl").style.display="none";showWError(e.message)}b.innerHTML="🔬 开始分析";b.disabled=false}
+function showWError(m){document.getElementById("wr").style.display="";document.getElementById("wr").innerHTML='<div class="card g24"><div class="err">'+m+'</div></div>'}
+function renderWFResult(d){
+var sum=d["汇总"]||{},wins=d["窗口明细"]||[],params=d["参数历史"]||[];
+var html='<div class="card g24"><div class="card-header"><div class="ib ib-v">🔬</div><h2>Walk-Forward 结果</h2></div>';
+html+='<div class="fg g24">';
+html+='<div class="si"><div class="si-l">窗口数</div><div class="si-v">'+(d["有效窗口"]||0)+"/"+(d["窗口总数"]||0)+'</div></div>';
+html+='<div class="si"><div class="si-l">平均IS收益</div><div class="si-v" style="color:'+(sum["平均样本内收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(sum["平均样本内收益率(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">平均OOS收益</div><div class="si-v" style="color:'+(sum["平均样本外收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(sum["平均样本外收益率(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">OOS胜率</div><div class="si-v">'+fm(sum["OOS胜率(%)"],1)+'%</div></div>';
+html+='<div class="si"><div class="si-l">过拟合比率</div><div class="si-v">'+(sum["过拟合比率(IS/OOS)"]||"--")+'</div></div>';
+html+='<div class="si"><div class="si-l">参数稳定性</div><div class="si-v" style="color:'+(sum["参数稳定性"]==="稳定"?"var(--up)":"var(--dn)")+'">'+sum["参数稳定性"]+'</div></div>';
+html+='<div class="si"><div class="si-l">综合判断</div><div class="si-v" style="font-size:16px;color:var(--pri)"><b>'+sum["综合判断"]+'</b></div></div>';
+html+='</div></div>';
+
+if(wins.length){
+html+='<div class="card g24"><div class="card-header"><h2>窗口明细</h2></div><div class="tbl-wrap" style="max-height:400px;overflow-y:auto"><table><thead><tr><th>#</th><th>训练期</th><th>测试期</th><th>参数</th><th class="r">IS收益%</th><th class="r">OOS收益%</th><th class="r">OOS夏普</th></tr></thead><tbody>';
+wins.forEach(function(w){
+html+='<tr><td>'+w["窗口"]+'</td><td class="cm">'+w["训练期"]+'</td><td class="cm">'+w["测试期"]+'</td><td>('+w["最优参数"].fast+','+w["最优参数"].slow+')</td><td class="r" style="color:'+(w["样本内收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(w["样本内收益率(%)"],2)+'</td><td class="r" style="font-weight:700;color:'+(w["样本外收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(w["样本外收益率(%)"],2)+'</td><td class="r">'+fm(w["OOS夏普"],2)+'</td></tr>'
+});
+html+='</tbody></table></div></div>'}
+document.getElementById("wr").innerHTML=html;document.getElementById("wr").style.display=""
+}
+
+// ── Monte Carlo ──
+async function runMonteCarlo(){
+var b=document.getElementById("mcbtn");b.innerHTML='<span class="spin" style="width:16px;height:16px;border-width:2px;margin:0"></span> 模拟中…';b.disabled=true;
+document.getElementById("mcl").style.display="";document.getElementById("mcr").style.display="none";
+try{var p={code:document.getElementById("mcc").value.trim()||"600519",strategy:document.getElementById("mcs").value,fast_period:parseInt(document.getElementById("mcf").value)||5,slow_period:parseInt(document.getElementById("mcsl").value)||20,n_simulations:parseInt(document.getElementById("mcn").value)||1000};var sd=document.getElementById("mcsd").value,ed=document.getElementById("mced").value;if(sd)p.start_date=sd;if(ed)p.end_date=ed;
+var r=await fetch("/api/monte_carlo",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});var d=await r.json();document.getElementById("mcl").style.display="none";
+if(d.error){showMCError(d.message||"Unknown")}else{renderMCResult(d)}}catch(e){document.getElementById("mcl").style.display="none";showMCError(e.message)}b.innerHTML="🎲 开始检验";b.disabled=false}
+function showMCError(m){document.getElementById("mcr").style.display="";document.getElementById("mcr").innerHTML='<div class="card g24"><div class="err">'+m+'</div></div>'}
+function renderMCResult(d){
+var orig=d["原始表现"]||{},dist=d["收益率分布"]||{},ddDist=d["最大回撤分布"]||{};
+var html='<div class="card g24"><div class="card-header"><div class="ib ib-v">🎲</div><h2>蒙特卡洛检验结果</h2></div>';
+html+='<div class="fg g24">';
+html+='<div class="si"><div class="si-l">模拟次数</div><div class="si-v">'+(d["模拟次数"]||0)+'</div></div>';
+html+='<div class="si"><div class="si-l">原始收益率</div><div class="si-v" style="color:'+(orig["总收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(orig["总收益率(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">模拟均值</div><div class="si-v">'+fm(dist["均值(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">95%置信上限</div><div class="si-v" style="color:var(--up)">+'+fm(dist["95分位(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">5%置信下限</div><div class="si-v" style="color:var(--dn)">'+fm(dist["5分位(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">正收益概率</div><div class="si-v" style="font-size:18px;color:'+(d["正收益概率(%)"]>=60?"var(--up)":"var(--dn)")+'"><b>'+fm(d["正收益概率(%)"],1)+'%</b></div></div>';
+html+='<div class="si"><div class="si-l">原始百分位</div><div class="si-v">'+fm(d["原始策略百分位"],1)+'%</div></div>';
+html+='<div class="si"><div class="si-l">综合判断</div><div class="si-v" style="font-size:15px;color:var(--pri)"><b>'+d["综合判断"]+'</b></div></div>';
+html+='</div></div>';
+document.getElementById("mcr").innerHTML=html;document.getElementById("mcr").style.display=""
+}
+
 document.getElementById("bc").addEventListener("keydown",function(e){if(e.key==="Enter")runBacktest()});
 </script>
 </body>

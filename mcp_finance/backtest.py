@@ -1255,6 +1255,7 @@ def walk_forward_analysis(
     """
     from datetime import datetime, timedelta
     from dateutil.relativedelta import relativedelta
+    import numpy as np
 
     # 获取完整K线数据
     try:
