@@ -17,15 +17,27 @@ from mcp_finance.api import (
     handle_realtime_quote, handle_kline, handle_market_indices,
     handle_north_flow, handle_batch_quotes, _safe_float,
     handle_sector_ranking, get_all_a_stocks_snapshot,
+    handle_financials,
 )
 from mcp_finance.screener import handle_stock_screener
 from mcp_finance.backtest import handle_backtest, handle_optimize, handle_walk_forward, handle_monte_carlo
 from mcp_finance.data import HOT_STOCKS, STOCK_MAPPING
+# ── Tushare toggle (默认禁用，避免免费版限频影响体验) ──
+_ts_enabled = False  # 用户可通过 /api/tushare/toggle 切换
 try:
-    from mcp_finance.tushare_source import is_available as _ts_available, get_financial_indicators_batch as _ts_fin_batch
+    from mcp_finance.tushare_source import is_available as _ts_raw_available, get_financial_indicators_batch as _ts_raw_fin_batch
+    _ts_has_module = True
 except ImportError:
-    _ts_available = lambda: False
-    _ts_fin_batch = lambda codes: {}
+    _ts_raw_available = lambda: False
+    _ts_raw_fin_batch = lambda codes: {}
+    _ts_has_module = False
+
+def _ts_available():
+    """检查 Tushare 是否可用（需同时满足：模块已安装 + 用户已启用）"""
+    return _ts_has_module and _ts_enabled and _ts_raw_available()
+
+def _ts_fin_batch(codes):
+    return _ts_raw_fin_batch(codes) if _ts_available() else {}
 
 import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -264,6 +276,26 @@ def api_search():
                 break
     return jsonify({"data": matches, "error": None})
 
+@app.route("/api/tushare/status")
+def api_ts_status():
+    """查询 Tushare 状态"""
+    return jsonify({
+        "enabled": _ts_enabled,
+        "available": _ts_has_module and _ts_raw_available(),
+        "has_module": _ts_has_module,
+    })
+
+
+@app.route("/api/tushare/toggle", methods=["POST"])
+def api_ts_toggle():
+    """切换 Tushare 启用/禁用"""
+    global _ts_enabled
+    d = request.get_json(silent=True) or {}
+    _ts_enabled = bool(d.get("enabled", not _ts_enabled))
+    return jsonify({"enabled": _ts_enabled, "available": _ts_available()})
+
+
+
 @app.route("/api/financials")
 def api_financials():
     """获取个股结构化财务数据"""
@@ -284,7 +316,9 @@ def api_screener():
         "min_gain": "min_gain", "max_gain": "max_gain",
         "min_volume_ratio": "min_volume_ratio", "min_turnover": "min_turnover",
         "max_pe": "max_pe", "max_pb": "max_pb",
-        "min_market_cap": "min_market_cap", "min_roe": "min_roe", "min_pb": "min_pb"
+        "min_market_cap": "min_market_cap", "min_roe": "min_roe", "min_pb": "min_pb",
+        "min_gross_margin": "min_gross_margin", "min_net_margin": "min_net_margin",
+        "min_revenue_growth": "min_revenue_growth",
     }
     for fk, ak in field_map.items():
         v = d.get(fk)
