@@ -231,29 +231,38 @@ $env:TUSHARE_TOKEN="你的token"    # Windows PowerShell
 
 ## Web Dashboard
 
-`mcp-finance` 内置了一个本地 Web 界面，将 MCP Tools 的能力包装为可视化面板：
+`mcp-finance` 内置了一个本地 Web 界面，将 MCP Tools 的能力包装为可视化面板。
+
+### 启动方式
 
 ```bash
-# 启动 Dashboard（默认 http://localhost:8080）
-mcp-dashboard
-# 或指定端口
-mcp-dashboard --port 3000
+# 方式一：双击项目根目录的脚本（推荐，自动杀旧进程）
+start_dashboard.bat          # Windows
+
+# 方式二：命令行启动
+mcp-dashboard                # 默认 http://localhost:8080
+mcp-dashboard 3000           # 指定端口
+
+# 方式三：直接运行模块
+python -m mcp_finance.dashboard.app
 ```
+
+> 服务基于 Flask 提供，启动后浏览器访问 `http://localhost:8080`。
 
 ### 功能页面
 
-| 页面 | 说明 |
-|------|------|
-| **行情总览** | 大盘指数、热门股票、行业/概念/地域板块排行、北向资金流向、个股K线速查 |
-| **选股器** | 多因子排行（综合评分+动量+活跃度）+ 条件选股（涨跌幅/换手率/量比/PE/PB/市值/ROE） |
-| **策略回测** | 8 种策略（双均线/MACD/RSI/KDJ/BOLL/海龟/波动率趋势/均值回归），交互式权益曲线，交易记录明细 |
+| 页面 | 路径 | 说明 |
+|------|------|------|
+| **行情总览** | `/` | 大盘指数、热门股票、行业板块排行、北向资金、个股K线速查、股票搜索 |
+| **选股器** | `/screener` | 多因子排行（综合评分+动量+价值+质量+增长+波动）+ 条件选股（涨跌幅/换手率/量比/PE/PB/市值/ROE） |
+| **策略回测** | `/backtest` | 基础回测 + 参数优化（网格/贝叶斯）+ Walk-Forward 样本外验证 + 蒙特卡洛稳健性检验 |
 
-### 设计
+### 技术栈
 
-- 双数据源：TDX（毫秒级行情+选股） + AKShare（财务/PE/PB/ROE，仅交易时段）
-- 选股器优先使用 TDX（~3s 全市场扫描），交易时段可切换 AKShare 获取完整财务数据
-- 响应式 UI，shadcn-inspired 设计系统
-- Plotly 交互式图表
+- **后端**：Flask（前后端数据格式兼容，不额外包层）
+- **数据源**：easy-tdx（毫秒级行情）+ AKShare（财务/板块/北向资金）+ yfinance（港美股兜底）+ Tushare（日线补充，需 Token）
+- **图表**：Plotly 交互式 K 线图 + 回测权益曲线
+- **UI**：响应式设计，深色主题
 
 ## 数据源
 
