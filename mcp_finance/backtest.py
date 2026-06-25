@@ -1151,7 +1151,11 @@ def optimize_backtest_bayesian(
         # 采样参数
         fast = trial.suggest_int("fast", fast_min, fast_max)
         # BUG-4 修复: 确保 slow > fast，避免快线慢于慢线产生无意义信号
-        slow = trial.suggest_int("slow", max(fast + 1, slow_min), slow_max)
+        # BUG-4b 修复: 当 fast >= slow_max 时，slow 的合法下界超过上界，直接剪枝跳过
+        slow_low = max(fast + 1, slow_min)
+        if slow_low > slow_max:
+            raise optuna.TrialPruned()
+        slow = trial.suggest_int("slow", slow_low, slow_max)
 
         # 运行回测
         try:

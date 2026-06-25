@@ -253,6 +253,39 @@ async def api_backtest(request: Request):
         return _err(str(e))
 
 
+@app.post("/api/optimize")
+async def api_optimize(request: Request):
+    try:
+        body = await request.json()
+        body["initial_capital"] = float(body.get("initial_capital", 200000))
+        result = handle_optimize(body)
+        return _ok(result)
+    except Exception as e:
+        return _err(str(e))
+
+
+@app.post("/api/walk_forward")
+async def api_walk_forward(request: Request):
+    try:
+        body = await request.json()
+        body["initial_capital"] = float(body.get("initial_capital", 200000))
+        result = handle_walk_forward(body)
+        return _ok(result)
+    except Exception as e:
+        return _err(str(e))
+
+
+@app.post("/api/monte_carlo")
+async def api_monte_carlo(request: Request):
+    try:
+        body = await request.json()
+        body["initial_capital"] = float(body.get("initial_capital", 200000))
+        result = handle_monte_carlo(body)
+        return _ok(result)
+    except Exception as e:
+        return _err(str(e))
+
+
 # ═══════════════════════ Entry ═══════════════════════
 def main():
     import uvicorn

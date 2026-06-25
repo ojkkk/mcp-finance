@@ -195,7 +195,18 @@ def factor_screener(
     try:
         snapshot = get_all_a_stocks_snapshot()
     except Exception as e:
-        return {"error": True, "message": f"获取全市场数据失败: {e}"}
+        snapshot = None
+    
+    # Fallback: 使用 screener 模块已验证的数据管道
+    if (snapshot is None or (isinstance(snapshot, list) and len(snapshot) == 0)):
+        try:
+            from mcp_finance.screener import _fetch_all_a_stocks as _screener_fetch
+            snapshot = _screener_fetch()
+        except Exception:
+            pass
+    
+    if snapshot is None or (isinstance(snapshot, list) and len(snapshot) == 0):
+        return {"error": True, "message": "全市场数据获取失败，请稍后重试"}
 
     if snapshot is None or (hasattr(snapshot, "empty") and snapshot.empty):
         return {"error": True, "message": "全市场数据为空"}
@@ -277,22 +288,22 @@ def factor_screener(
                 "代码": code,
                 "名称": name,
                 "最新价": float(row.get("最新价", row.get("f2", 0) or 0) or 0),
-                "涨跌幅(%)": gain,
+                "涨跌幅": gain,
                 "市盈率": pe,
                 "市净率": pb,
-                "换手率(%)": turnover,
-                "总市值(亿)": market_cap,
+                "换手率": turnover,
+                "总市值": market_cap,
                 "动量得分": round(m_score),
                 "价值得分": round(v_score),
                 "质量得分": round(q_score),
                 "增长得分": round(g_score),
                 "波动得分": round(vol_score),
-                "综合得分": round(total, 1),
+                "综合评分": round(total, 1),
             })
         except Exception:
             continue
 
-    scored.sort(key=lambda x: x["综合得分"], reverse=True)
+    scored.sort(key=lambda x: x["综合评分"], reverse=True)
     top = scored[:top_n]
 
     return {
