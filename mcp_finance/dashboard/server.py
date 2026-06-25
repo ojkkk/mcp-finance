@@ -10,7 +10,7 @@ from mcp_finance.api import (
     handle_sector_ranking, handle_north_flow, handle_batch_quotes,
 )
 from mcp_finance.screener import handle_stock_screener
-from mcp_finance.backtest import handle_backtest
+from mcp_finance.backtest import handle_backtest, handle_optimize, handle_walk_forward, handle_monte_carlo
 from mcp_finance.analysis import handle_factor_screener
 from mcp_finance.data import STOCK_MAPPING, HOT_STOCKS
 from mcp_finance.logging_config import get_logger
@@ -178,6 +178,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if fp: args["fast_period"] = int(fp)
                 if sp: args["slow_period"] = int(sp)
                 return self._send_json(self._safe_call(handle_backtest, args))
+
+            if path == "/api/optimize":
+                body["initial_capital"] = float(body.get("initial_capital", 200000))
+                return self._send_json(self._safe_call(handle_optimize, body))
+
+            if path == "/api/walk_forward":
+                body["initial_capital"] = float(body.get("initial_capital", 200000))
+                return self._send_json(self._safe_call(handle_walk_forward, body))
+
+            if path == "/api/monte_carlo":
+                body["initial_capital"] = float(body.get("initial_capital", 200000))
+                return self._send_json(self._safe_call(handle_monte_carlo, body))
 
             self._send_json({"error": "not found"}, 404)
         except Exception as e:

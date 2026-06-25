@@ -50,7 +50,7 @@ def _safe_json(data):
     if isinstance(data, (int, float, str, bool, type(None))): return data
     return str(data)
 
-def _ok(result): return JSONResponse({"data": _safe_json(result), "error": None})
+def _ok(result): return JSONResponse(_safe_json(result) if isinstance(result, dict) else {"data": _safe_json(result)})
 def _err(msg): return JSONResponse({"data": None, "error": str(msg)})
 
 
