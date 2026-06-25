@@ -128,7 +128,7 @@ def _to_sina_code(code: str) -> str:
 
 
 # ── 数据源配置 ──────────────────────────────────────────────────
-_SPOT_CACHE_TTL = 300.0  # 全市场快照缓存 5 分钟
+_SPOT_CACHE_TTL = 600.0  # 10 分钟，减少全市场快照重拉频率  # 全市场快照缓存 5 分钟
 
 from mcp_finance.cache import TTLCache
 _spot_cache = TTLCache(default_ttl=_SPOT_CACHE_TTL)
@@ -397,42 +397,60 @@ def _parse_kline_row(row):
     }
 
 
+# 全市场快照加载状态: None=未加载, True=加载中, False=加载完成
+_all_stocks_loading = False
+_all_stocks_loading_lock = threading.Lock()
+
 def _fetch_all_a_stocks_cache():
     """获取全市场 A 股快照（仅用于选股器，60s 超时保护）
 
     直接调用 ak.stock_zh_a_spot()，用线程超时保护防止永久挂死。
-    结果缓存 5 分钟。
+    结果缓存 10 分钟，防止缓存惊群。
     注意：此函数拉取全市场 ~5000 只股票，可能需 20-30 秒。
     """
+    global _all_stocks_loading
     cache_key = "all_a_stocks"
-    # Double-checked locking: prevent concurrent cache stampede
-    with _spot_cache_lock:
-        cached = _spot_cache.get(cache_key)
-        if cached is not None:
-            return cached
 
-    # Cache miss — fetch with timeout protection
+    # 1. 快速检查缓存
+    cached = _spot_cache.get(cache_key)
+    if cached is not None:
+        return cached
 
+    # 2. 防止缓存惊群: 如果已有请求在加载中，等待它完成
+    with _all_stocks_loading_lock:
+        if _all_stocks_loading:
+            # 已有线程在加载，等待最多 65s（60s fetch + 5s margin）
+            _api_logger.info("全市场快照加载中，等待已有请求完成...")
+            for _ in range(65):
+                time.sleep(1)
+                cached = _spot_cache.get(cache_key)
+                if cached is not None:
+                    return cached
+            _api_logger.warning("全市场快照等待超时，返回 None")
+            return None
+        _all_stocks_loading = True
 
-
-    df = None
     try:
-        future = _API_EXECUTOR.submit(lambda: _get_ak().stock_zh_a_spot())
+        df = None
         try:
-            df = future.result(timeout=60)
-        except FuturesTimeoutError:
-            future.cancel()
+            future = _API_EXECUTOR.submit(lambda: _get_ak().stock_zh_a_spot())
+            try:
+                df = future.result(timeout=60)
+            except FuturesTimeoutError:
+                future.cancel()
+            except Exception as e:
+                _api_logger.warning("全市场快照 future.result 异常: %s", e)
+                pass
         except Exception as e:
-            _api_logger.warning("全市场快照 future.result 异常: %s", e)
+            _api_logger.warning("全市场快照 submit 异常: %s", e)
             pass
-    except Exception as e:
-        _api_logger.warning("全市场快照 submit 异常: %s", e)
-        pass
 
-    if df is not None and not df.empty:
-        with _spot_cache_lock:
+        if df is not None and not df.empty:
             _spot_cache.set(cache_key, df, ttl=_SPOT_CACHE_TTL)
-    return df
+        return df
+    finally:
+        with _all_stocks_loading_lock:
+            _all_stocks_loading = False
 
 # ================================================================
 # 1. 实时行情（单只股票）

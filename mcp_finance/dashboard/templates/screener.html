@@ -59,8 +59,8 @@ var ld=document.getElementById("factor-loading"),er=document.getElementById("fac
 rd.style.display="none";er.style.display="none";ld.style.display="block";
 try{var r=await fetch("/api/factor_screener",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({top_n:parseInt(top),min_market_cap:parseFloat(mc)})});var d=await r.json();ld.style.display="none";
 if(d.error){er.style.display="block";er.textContent=typeof d.error==="string"?d.error:(d.message||"Error");return}
-var items=d.data||[],meta=d.meta||{};if(!items.length){er.style.display="block";er.textContent="暂无符合条件的股票（数据源: "+(meta.source||"N/A")+"）";return}
-document.getElementById("factor-meta").textContent="数据源: "+(meta.source||"N/A")+" · 扫描: "+(meta.scanned||0)+"只";
+var items=d["排名"]||d.data||[];if(!items.length){er.style.display="block";er.textContent="暂无符合条件的股票（扫描: "+(d["筛选结果"]||0)+"只，返回: "+(d["返回"]||0)+"只）";return}
+document.getElementById("factor-meta").textContent="因子: 动量+价值+质量+增长+波动 · 扫描: "+(d["筛选结果"]||0)+"只 · 返回: "+(d["返回"]||0)+"只";
 document.getElementById("factor-count").textContent="共 "+items.length+" 只";
 document.getElementById("factor-tbody").innerHTML=items.map(function(s){return'<tr><td class="cm">'+s["代码"]+'</td><td class="nm">'+s["名称"]+'</td><td class="pr">'+fm(s["最新价"],2)+'</td><td class="'+pc(s["涨跌幅"])+'">'+pf(s["涨跌幅"])+'</td><td class="mu">'+fv(s["成交额"])+'</td><td class="r" style="font-weight:700"><span style="color:'+scoreColor(s["综合评分"])+'">'+s["综合评分"]+'</span><span class="score-bar"><span class="score-bar-fill" style="width:'+(s["综合评分"]||0)+'%;background:'+scoreColor(s["综合评分"])+'"></span></span></td><td class="mu">'+(s["动量得分"]||0)+'</td><td class="mu">'+(s["增长得分"]||0)+'</td></tr>'}).join("");rd.style.display="block"}catch(e){ld.style.display="none";er.style.display="block";er.textContent=e.message}}
 
@@ -71,8 +71,8 @@ var ld=document.getElementById("screen-loading"),er=document.getElementById("scr
 rd.style.display="none";er.style.display="none";ld.style.display="block";
 try{var r=await fetch("/api/screener",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});var d=await r.json();ld.style.display="none";
 if(d.error){er.style.display="block";er.textContent=typeof d.error==="string"?d.error:(d.message||"Error");return}
-var items=d.data||[],meta=d.meta||{};if(!items.length){er.style.display="block";er.textContent="暂无匹配结果（扫描: "+(meta.scanned||0)+"只）";return}
-document.getElementById("screen-count").textContent="共 "+items.length+" 只（扫描: "+(meta.scanned||0)+"只）";
+var items=d["matched"]||d.data||[];if(!items.length){er.style.display="block";er.textContent="暂无匹配结果（扫描: "+(d["total_scanned"]||0)+"只，条件: "+(JSON.stringify(d["conditions"]||{}))+"）";return}
+document.getElementById("screen-count").textContent="共 "+items.length+" 只（扫描: "+(d["total_scanned"]||0)+"只）";
 document.getElementById("screen-tbody").innerHTML=items.map(function(s){return'<tr><td class="cm">'+s["代码"]+'</td><td class="nm">'+s["名称"]+'</td><td class="pr">'+fm(s["最新价"],2)+'</td><td class="'+pc(s["涨跌幅"])+'">'+pf(s["涨跌幅"])+'</td><td class="mu">'+(s["换手率"]!=null?fm(s["换手率"],2)+"%":"--")+'</td><td class="mu">'+fm(s["市盈率"],1)+'</td><td class="mu">'+fm(s["市净率"],1)+'</td><td class="mu">'+fm(s["量比"],1)+'</td><td class="mu">'+fv(s["总市值"])+'</td></tr>'}).join("");rd.style.display="block"}catch(e){ld.style.display="none";er.style.display="block";er.textContent=e.message}}
 </script>
 </body>
