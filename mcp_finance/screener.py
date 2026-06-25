@@ -190,7 +190,7 @@ def screen_stocks(
             "昨收": item.get("f18"),
         })
 
-    matched.sort(key=lambda x: x["涨跌幅(%)"] if x["涨跌幅(%)"] is not None else -9999, reverse=True)
+    matched.sort(key=lambda x: x["涨跌幅"] if x["涨跌幅"] is not None else -9999, reverse=True)
 
     result = {
         "matched": matched[:int(top_n)],
