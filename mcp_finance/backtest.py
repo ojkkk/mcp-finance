@@ -378,13 +378,14 @@ class _KDJStrategy(_BaseStrategy):
     def sell_signal(self): return self.crossover < 0
 
 class _BollingerStrategy(_BaseStrategy):
-    """BOLL突破策略"""
+    """BOLL突破策略: 突破上轨买入，价格跌回中轨以下卖出"""
     params = dict(fast=20, slow=0)
     def __init__(self):
         super().__init__()
         self.boll = bt.indicators.BollingerBands(self.data.close, period=self.params.fast, devfactor=2.0)
     def buy_signal(self): return self.data.close[0] > self.boll.top[0] and self.data.close[-1] <= self.boll.top[-1]
-    def sell_signal(self): return self.data.close[0] < self.boll.bot[0] and self.data.close[-1] >= self.boll.bot[-1]
+    # BUG-12 修复: 原来的卖出信号是跌破下轨（最坏时机止损），改为回落中轨以下（合理获利/止损出场）
+    def sell_signal(self): return self.data.close[0] < self.boll.mid[0]
 
 # ============================================================================
 # 进阶策略 (3种)
@@ -569,6 +570,9 @@ class _CustomStrategy(_BaseStrategy):
     def _make_eval(self, conditions: list, logic: str, idx_range):
         """构建条件评估闭包"""
         def evaluator():
+            # BUG-3 修复: close/volume 必须在闭包内通过 self 访问，不能依赖外层局部变量
+            close = self.data.close
+            volume = self.data.volume
             results = []
             for idx, cond in zip(idx_range, conditions):
                 name = f"_c{idx}"
@@ -779,7 +783,13 @@ def _run_single_backtest(
 
     # 风险指标
     sortino = _calc_sortino(equity_curve) if equity_curve else 0.0
-    calmar = round(total_return / abs(max_drawdown), 2) if max_drawdown and max_drawdown > 0 else 0.0
+    # 卡玲比率 — BUG-17 修复: 回撕为 0 时返回 999 而非 0.0
+    if max_drawdown > 0.001:
+        calmar = round(total_return / max_drawdown, 2)
+    elif total_return > 0:
+        calmar = 999.0   # 完全不回撕且盈利，卡玲应趋向无穷大
+    else:
+        calmar = 0.0
     ann_vol = 0.0
     if hasattr(strat.analyzers, 'ann_vol'):
         try:
@@ -826,9 +836,17 @@ def _run_single_backtest(
         "最大连续亏损(次)": max_consec_loss,
         "交易记录": getattr(strat, "trade_log", []),
         "跳过信号": getattr(strat, "skipped_signals", []),
+        "警告": [],
         "权益曲线": equity_curve,
         "基准(买入持有)": {"总收益率(%)": round(bh_return, 2), "年化收益率(%)": bh_annual, "权益曲线": bh_equity},
     }
+    # 资金不足警告
+    warnings_list = []
+    if total_closed == 0 and getattr(strat, "skipped_signals", []):
+        cap_reasons = [s for s in strat.skipped_signals if "资金不足" in s.get("原因","")]
+        if cap_reasons:
+            warnings_list.append(f"初始资金({initial_capital})不足以买入一手(100股), 请增大 initial_capital 参数。当前股价约{cap_reasons[0].get('价格','?')}元")
+    result["警告"] = warnings_list
     if index_data: result["基准(沪深300)"] = index_data
     result["解读"] = _generate_commentary(strat_label, total_return, max_drawdown, sharpe, bh_return, win_rate, total_closed)
     return result
@@ -843,41 +861,51 @@ class _EquityRecorder(bt.analyzers.Analyzer):
     def get_analysis(self): return self._values
 
 class _AnnualVolatility(bt.analyzers.Analyzer):
-    """年化波动率"""
-    def __init__(self): self._returns = []
+    """年化波动率 — 基于策略净値日收益率（非股价日收益率）"""
+    # BUG-9 修复: 原来用 self.data.close （股价）计算波动率，
+    # 空仓期间股价仍在波动但策略净値不变，会严重高估策略波动率
+    def __init__(self):
+        self._returns = []
+        self._prev_val = None
     def next(self):
-        if len(self.data) > 1:
-            prev, curr = self.data.close[-1], self.data.close[0]
-            if prev > 0: self._returns.append(curr / prev - 1)
+        curr_val = self.strategy.broker.getvalue()
+        if self._prev_val is not None and self._prev_val > 0:
+            self._returns.append(curr_val / self._prev_val - 1)
+        self._prev_val = curr_val
     def get_analysis(self):
         if not self._returns: return {"annual_volatility": 0}
-        daily_vol = float(np.std(self._returns))
+        # BUG-13 修复: 使用样本标准差（ddof=1）而非总体标准差
+        daily_vol = float(np.std(self._returns, ddof=1))
         return {"annual_volatility": round(daily_vol * np.sqrt(252) * 100, 2)}
 
 # ============================================================================
 # 风险指标计算
 # ============================================================================
 def _calc_sortino(equity_curve: list[dict]) -> float:
-    """索提诺比率(只惩罚下行波动)"""
+    """索提诺比率 — 标准下行偏差计算（目标收益率参考无风险利率 2%）"""
+    # BUG-8 修复: 原来用 std(负收益) 会系统性高估 Sortino；
+    # 标准做法: 所有收益与目标的负偏差均方均値开方根为分母，分子减去无风险利率
     if len(equity_curve) < 10: return 0.0
     values = [e["市值"] for e in equity_curve]
     returns = [values[i] / values[i-1] - 1 for i in range(1, len(values)) if values[i-1] > 0]
     if not returns: return 0.0
-    downside = [r for r in returns if r < 0]
-    if not downside: return 0.0
-    ds = float(np.std(downside))
+    risk_free_daily = 0.02 / 252
+    # 下行偏差: 只惩罚低于目标收益的部分
+    downside_sq = [(min(r - risk_free_daily, 0)) ** 2 for r in returns]
+    ds = float(np.sqrt(np.mean(downside_sq)))
     if ds == 0: return 0.0
     annual_return = (1 + float(np.mean(returns))) ** 252 - 1
     annual_downside = ds * np.sqrt(252)
-    return round(annual_return / annual_downside, 2) if annual_downside > 0 else 0.0
+    return round((annual_return - 0.02) / annual_downside, 2) if annual_downside > 0 else 0.0
 
 def _get_index_benchmark(code: str, start_date: str, end_date: str, initial_capital: float) -> dict | None:
-    """获取指数基准 — A股用沪深300, 港股/美股跳过"""
+    """获取指数基准 — A股用调用方指定的基准指数, 港股/美股跳过"""
     market = _detect_market(code)
     if market != "a":
         return None  # 港美股无对应基准指数
     try:
-        idx_klines = get_kline_a(code="000300", period="daily", adjust="qfq", limit=800)
+        # BUG-5 修复: 原来硬编码 "000300"，现在使用传入的 code 参数
+        idx_klines = get_kline_a(code=code, period="daily", adjust="qfq", limit=800)
         if not idx_klines or (isinstance(idx_klines[0], dict) and "error" in idx_klines[0]): return None
         idx_klines = [k for k in idx_klines if "日期" in k and start_date <= k["日期"] <= end_date]
         if len(idx_klines) < 10: return None
@@ -992,6 +1020,7 @@ def optimize_backtest(code: str, strategy: str = "ma_cross",
 
     # ── 2. 构建参数组合列表 ──
     tasks = [(fast, slow) for fast in fast_range for slow in slow_range if slow > fast]
+    valid_task_count = len(tasks)  # BUG-14 修复: 记录实际有效组合数
 
     # ── 3. 并行执行（ThreadPoolExecutor 无进程启动开销，比 ProcessPool 快 2-3x）──
     results_list: list[dict] = []
@@ -1047,7 +1076,8 @@ def optimize_backtest(code: str, strategy: str = "ma_cross",
         if best_val != 0 and abs((max(nv) - min(nv)) / best_val) > 0.5:
             warning = "最优参数附近结果波动较大,可能存在过拟合,建议样本外验证"
     return {"策略": _STRATEGY_LABELS.get(strategy, strategy), "股票": _get_stock_name(code),
-            "优化目标": metric, "测试组合数": len(fast_range) * len(slow_range),
+            # BUG-14 修复: 使用实际有效组合数而非笛卡尔积总数
+            "优化目标": metric, "测试组合数": valid_task_count,
             "已完成组合数": completed_count,
             "有效结果数": len(results_list),
             "最优参数": {"fast": best["fast"], "slow": best["slow"]},
@@ -1117,7 +1147,8 @@ def optimize_backtest_bayesian(
         nonlocal best_result
         # 采样参数
         fast = trial.suggest_int("fast", fast_min, fast_max)
-        slow = trial.suggest_int("slow", slow_min, slow_max)
+        # BUG-4 修复: 确保 slow > fast，避免快线慢于慢线产生无意义信号
+        slow = trial.suggest_int("slow", max(fast + 1, slow_min), slow_max)
 
         # 运行回测
         try:
@@ -1283,7 +1314,8 @@ def walk_forward_analysis(
     while True:
         train_start = window_start
         train_end = train_start + train_delta
-        test_start = train_end
+        # BUG-6 修复: test_start 从 train_end 的次日开始，避免边界日数据同时出现在训练期和测试期（数据泄露）
+        test_start = train_end + timedelta(days=1)
         test_end = test_start + test_delta
 
         if test_end > data_end:
@@ -1333,7 +1365,8 @@ def walk_forward_analysis(
                 code=code, strategy=strategy,
                 fast_period=best_fast, slow_period=best_slow,
                 start_date=win["test_start"], end_date=win["test_end"],
-                benchmark_code=None, klines=None,
+                # BUG-7 修复: 传入预取的 K 线数据，避免每个窗口都重新发起网络请求
+                benchmark_code=None, klines=klines,
                 slippage_type="fixed_perc", slippage_value=0.001,
             )
         except Exception:
@@ -1374,7 +1407,11 @@ def walk_forward_analysis(
         oos_std = 0.0
 
     # 过拟合比率: IS/OOS 收益率比值 (>2 提示过拟合)
-    overfit_ratio = round(abs(avg_is / avg_oos), 2) if abs(avg_oos) > 0.5 else None
+    # BUG-15 修复: 原来 avg_oos 接近 0 时返回 None 且取绝对值导致方向信息丢失
+    if abs(avg_oos) > 0.5:
+        overfit_ratio = round(avg_is / avg_oos, 2)  # 保留符号：IS正OOS负 vs IS正OOS正 可区分
+    else:
+        overfit_ratio = "N/A"  # OOS 接近零，比值无统计意义
 
     # 参数稳定性: fast/slow 的变异系数
     param_stability = "稳定"
@@ -1458,74 +1495,14 @@ def monte_carlo_test(
     if len(trades) < 6:
         return {"error": f"交易次数不足 ({len(trades)})，需要至少 6 笔交易进行蒙特卡洛检验"}
 
-    # 提取每笔交易的收益率 (盈亏百分比)
-    trade_returns = []
-    for t in trades:
-        action = t.get("动作", "")
-        if action == "卖出":
-            price = float(t.get("价格", 0))
-            amount = float(t.get("金额", 0))
-            if price > 0:
-                shares = abs(amount / price)
-            else:
-                shares = 0
-            # 简化: 取成交金额变化作为单笔收益
-            trade_returns.append(float(t.get("金额", 0)))
+    # BUG-16 修复: 删除原来的 trade_returns 死代码（从未被后续模拟使用）
+    # 直接使用权益曲线提取日收益率进行 Bootstrap 模拟
 
-    if len(trade_returns) < 3:
-        return {"error": "无法提取足够的交易收益率"}
-
-    # ── 2. 蒙特卡洛模拟 ──
-    sim_returns = []
-    sim_drawdowns = []
-    np.random.seed(42)
-
-    for _ in range(n_simulations):
-        # 随机重排交易序列
-        shuffled = np.random.permutation(trade_returns)
-        # 计算累计收益率
-        initial_cap = original.get("初始资金", 100000)
-        equity = initial_cap
-        max_equity = equity
-
-        for tr in shuffled:
-            equity += tr - equity  # 简化模拟
-        # Actually let me do proper cumulative calculation
-        equity = initial_cap
-        max_equity = equity
-        max_dd = 0.0
-
-        for tr in shuffled:
-            if tr > 0:
-                equity *= (1 + abs(tr) / equity * 0.01)  # rough approximation
-            else:
-                equity += tr  # simplified
-
-        # Better approach: use returns as percentage changes
-        total_return = (equity / initial_cap - 1) * 100
-        sim_returns.append(total_return)
-
-    # Alternative: use a cleaner approach
-    # Get trade-level PnL from the backtest analyser
-    trade_analyzer = None
-    # We already have basic trade info; let's compute properly
-
-    # Re-do with proper approach: each trade return as % of capital
-    trade_pcts = []
-    for t in trades:
-        action = t.get("动作", "")
-        price = float(t.get("价格", 0))
-        amount = float(t.get("金额", 0))
-        if action == "卖出" and price > 0:
-            # The return impact is already captured in the amount change
-            trade_pcts.append(amount)
-
-    # Simplified: use the original equity curve to extract daily returns
+    # ── 2. 从权益曲线提取日收益率 ──
     equity_curve = original.get("权益曲线", [])
     if len(equity_curve) < 2:
         return {"error": "权益曲线数据不足"}
 
-    # Extract daily returns from equity curve
     daily_returns = []
     for i in range(1, len(equity_curve)):
         prev_val = equity_curve[i-1].get("市值", 0)
@@ -1536,7 +1513,9 @@ def monte_carlo_test(
     if len(daily_returns) < 10:
         return {"error": "日收益率数据不足"}
 
-    # Monte Carlo: bootstrap daily returns
+    # ── 3. 蒙特卡洛模拟（Bootstrap 重采样日收益率序列）──
+    # BUG-1 修复: 删除原来两个废弃的、逻辑错误的模拟循环，只保留正确的 Bootstrap 方法
+    # BUG-1 修复: np.random.seed 只调用一次（原代码调用了两次）
     sim_returns = []
     sim_drawdowns = []
     np.random.seed(42)
@@ -1548,13 +1527,13 @@ def monte_carlo_test(
         cum_return = np.prod(1 + sampled) - 1
         sim_returns.append(cum_return * 100)
 
-        # 最大回撤
+        # 最大回撤（结果为负数，如 -15.3 表示回撤 15.3%）
         equity_curve_sim = 100 * np.cumprod(1 + sampled)
         peak = np.maximum.accumulate(equity_curve_sim)
         dd = np.min((equity_curve_sim - peak) / peak) * 100
         sim_drawdowns.append(dd)
 
-    # ── 3. 统计分析 ──
+    # ── 4. 统计分析 ──
     sim_returns = np.array(sim_returns)
     sim_drawdowns = np.array(sim_drawdowns)
 
@@ -1611,9 +1590,11 @@ def monte_carlo_test(
             "95分位(%)": round(ret_95p, 2),
         },
         "最大回撤分布": {
+            # BUG-2 修复: dd 是负数，5th分位=最负=最差回撤，95th分位=最不负=最优回撤
+            # 原来标签完全颠倒了
             "中位数(%)": round(dd_50p, 2),
-            "最优5%(%)": round(dd_5p, 2),
-            "最差5%(%)": round(dd_95p, 2),
+            "最优5%(%)": round(dd_95p, 2),   # 95th分位 = 最小回撤（最不负）
+            "最差5%(%)": round(dd_5p, 2),     # 5th分位 = 最大回撤（最负）
         },
         "正收益概率(%)": round(prob_positive, 1),
         "原始策略百分位": round(original_percentile, 1),

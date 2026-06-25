@@ -535,17 +535,17 @@ def api_backtest():
         "code": d.get("code", "000001"),
         "strategy": d.get("strategy", "ma_cross"),
         "start_date": d.get("start_date", "2025-01-01"),
-        "end_date": d.get("end_date", "2026-06-24"),
+        # BUG-10 修复: 原来硬编码 "2026-06-24"，日期过期后所有未指定结束日期的回测静默使用过去日期
+        # 修复为传 None，_run_single_backtest 会自动用 datetime.now()
+        "end_date": d.get("end_date") or None,
         "initial_capital": float(d.get("initial_capital", 200000)),
         "generate_chart": False,
     }
-    if d.get("fast_period"): args["fast_period"] = int(d["fast_period"])
-    if d.get("slow_period"): args["slow_period"] = int(d["slow_period"])
+    if d.get("fast_period") is not None: args["fast_period"] = int(d["fast_period"])
+    if d.get("slow_period") is not None: args["slow_period"] = int(d["slow_period"])
     if d.get("slippage_type"): args["slippage_type"] = d["slippage_type"]
     if d.get("slippage_value"): args["slippage_value"] = float(d["slippage_value"])
     if d.get("strategy_config"): args["strategy_config"] = d["strategy_config"]
-    if d.get("optimization_method"): args["optimization_method"] = d["optimization_method"]
-    if d.get("n_trials"): args["n_trials"] = int(d["n_trials"])
 
     result = _safe_call(handle_backtest, args)
     return jsonify(result)
@@ -566,8 +566,13 @@ def api_optimize():
 @app.route("/api/walk_forward", methods=["POST"])
 def api_walk_forward():
     d = request.get_json(silent=True) or {}
-    args = {"code": d.get("code","000001"), "strategy": d.get("strategy","ma_cross")}
-    for k in ("train_years","test_months","step_months","fast_min","fast_max","slow_min","slow_max","n_trials"):
+    args = {
+        "code": d.get("code", "000001"),
+        "strategy": d.get("strategy", "ma_cross"),
+        # BUG-11 修复: 加入 metric 参数，原来缺少导致用户无法指定优化目标
+        "metric": d.get("metric", "sharpe"),
+    }
+    for k in ("train_years", "test_months", "step_months", "fast_min", "fast_max", "slow_min", "slow_max", "n_trials"):
         if k in d: args[k] = float(d[k]) if k == "train_years" else int(d[k])
     return jsonify(_safe_call(handle_walk_forward, args))
 

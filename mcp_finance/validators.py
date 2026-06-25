@@ -391,3 +391,84 @@ class SearchStockParams(BaseModel):
         if not v:
             raise ValueError("搜索关键词不能为空")
         return v
+
+
+# BUG-18 修复: 添加 WalkForwardParams 和 MonteCarloParams 验证器
+# 原来这两个工具没有注册到 _TOOL_VALIDATORS，LLM 传来的字符串类型整数参数不会被自动转换
+
+_VALID_STRATEGIES = {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal",
+                     "turtle", "vol_trend", "mean_rev", "custom"}
+_VALID_METRICS = {"sharpe", "return", "mdd", "win_rate", "sortino", "calmar"}
+
+
+class WalkForwardParams(BaseModel):
+    code: str = Field(..., description="股票代码", min_length=1, max_length=20)
+    strategy: str = Field(default="ma_cross", description="策略名称")
+    train_years: float = Field(default=2.0, ge=0.5, le=10.0, description="训练窗口年数")
+    test_months: int = Field(default=6, ge=1, le=24, description="测试窗口月数")
+    step_months: int = Field(default=6, ge=1, le=12, description="滑动步长月数")
+    fast_min: int = Field(default=3, ge=2, le=100, description="快线参数最小值")
+    fast_max: int = Field(default=40, ge=3, le=200, description="快线参数最大值")
+    slow_min: int = Field(default=10, ge=3, le=200, description="慢线参数最小值")
+    slow_max: int = Field(default=120, ge=5, le=500, description="慢线参数最大值")
+    metric: str = Field(default="sharpe", description="优化目标")
+    n_trials: int = Field(default=30, ge=5, le=100, description="每窗口贝叶斯优化次数")
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        return v.strip()
+
+    @field_validator("strategy")
+    @classmethod
+    def validate_strategy(cls, v: str) -> str:
+        if v not in _VALID_STRATEGIES:
+            raise ValueError(f"strategy 必须是 {sorted(_VALID_STRATEGIES)} 之一")
+        return v
+
+    @field_validator("metric")
+    @classmethod
+    def validate_metric(cls, v: str) -> str:
+        if v not in _VALID_METRICS:
+            raise ValueError(f"metric 必须是 {sorted(_VALID_METRICS)} 之一")
+        return v
+
+    @model_validator(mode="after")
+    def validate_ranges(self):
+        if self.fast_max <= self.fast_min:
+            raise ValueError("fast_max 必须大于 fast_min")
+        if self.slow_max <= self.slow_min:
+            raise ValueError("slow_max 必须大于 slow_min")
+        return self
+
+
+class MonteCarloParams(BaseModel):
+    code: str = Field(..., description="股票代码", min_length=1, max_length=20)
+    strategy: str = Field(default="ma_cross", description="策略名称")
+    fast_period: int = Field(default=5, ge=2, le=250, description="快线周期")
+    slow_period: int = Field(default=20, ge=3, le=500, description="慢线周期")
+    start_date: Optional[str] = Field(default=None, description="开始日期 YYYY-MM-DD")
+    end_date: Optional[str] = Field(default=None, description="结束日期 YYYY-MM-DD")
+    n_simulations: int = Field(default=1000, ge=100, le=10000, description="模拟次数")
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        return v.strip()
+
+    @field_validator("strategy")
+    @classmethod
+    def validate_strategy(cls, v: str) -> str:
+        if v not in _VALID_STRATEGIES:
+            raise ValueError(f"strategy 必须是 {sorted(_VALID_STRATEGIES)} 之一")
+        return v
+
+    @model_validator(mode="after")
+    def validate_periods(self):
+        if self.slow_period <= self.fast_period:
+            raise ValueError(f"slow_period({self.slow_period}) 必须大于 fast_period({self.fast_period})")
+        if self.start_date and not _is_valid_date(self.start_date):
+            raise ValueError(f"start_date 格式错误: {self.start_date}，应为 YYYY-MM-DD")
+        if self.end_date and not _is_valid_date(self.end_date):
+            raise ValueError(f"end_date 格式错误: {self.end_date}，应为 YYYY-MM-DD")
+        return self

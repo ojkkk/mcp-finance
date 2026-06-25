@@ -545,6 +545,8 @@ try:
         NorthFlowParams, TechnicalIndicatorsParams,
         ScreenerParams, BacktestParams, OptimizeParams,
         PlotKlineParams, validate_and_coerce,
+        # BUG-18 修复: 导入新增的 walk_forward 和 monte_carlo 验证器
+        WalkForwardParams, MonteCarloParams,
     )
     _TOOL_VALIDATORS.update({
         "get_kline": KlineParams,
@@ -555,6 +557,10 @@ try:
         "stock_screener": ScreenerParams,
         "backtest_strategy": BacktestParams,
         "optimize_strategy": OptimizeParams,
+        # BUG-18 修复: 注册 walk_forward 和 monte_carlo_test 验证器
+        # 原来缺少注册导致 LLM 传字符串类型整数参数时不会被自动转换，引发 TypeError
+        "walk_forward": WalkForwardParams,
+        "monte_carlo_test": MonteCarloParams,
         "plot_kline": PlotKlineParams,
         "get_realtime_quote": RealtimeQuoteParams,
         "get_market_indices": MarketIndicesParams,
@@ -595,14 +601,23 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
         # 临时重定向 stdout → devnull，防止 akshare/easy-tdx 的 print 输出
         # 污染 MCP JSON-RPC 通信通道（MCP 走 stdio，stdout 只应输出 JSON-RPC）
         def _safe_handler():
+            # BUG-19 修复: 原来的实现不是异常安全的:
+            # 1. open(os.devnull) 失败时 sys.stdout 未被还原
+            # 2. sys.stdout.close() 在 restore 之前执行，抛异常则 stdout 永久丢失
             import sys
             old_stdout = sys.stdout
+            devnull_fh = None
             try:
-                sys.stdout = open(os.devnull, "w", encoding="utf-8")
+                devnull_fh = open(os.devnull, "w", encoding="utf-8")
+                sys.stdout = devnull_fh
                 return handler(arguments)
             finally:
-                sys.stdout.close()
-                sys.stdout = old_stdout
+                sys.stdout = old_stdout   # 先还原，确保无论如何都能恢复
+                if devnull_fh is not None:
+                    try:
+                        devnull_fh.close()
+                    except Exception:
+                        pass
 
         # optimize_strategy 需要更长时间
         timeout = 300.0 if name == "walk_forward" else 180.0 if name == "optimize_strategy" else 120.0 if name == "backtest_strategy" else 90.0
