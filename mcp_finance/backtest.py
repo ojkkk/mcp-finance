@@ -991,6 +991,7 @@ def optimize_backtest(code: str, strategy: str = "ma_cross",
                       start_date: str | None = None, end_date: str | None = None,
                       metric: str = "sharpe", benchmark_index: str | None = None,
                       max_workers: int | None = None,
+                      initial_capital: float = 100000.0,
                       ) -> dict[str, Any]:
     """网格搜索参数优化 — 预取K线 + 进程池并行
 
@@ -1035,6 +1036,7 @@ def optimize_backtest(code: str, strategy: str = "ma_cross",
                 start_date=start_date, end_date=end_date,
                 benchmark_code=None,          # 优化模式跳过指数基准 IO
                 klines=pre_fetched_klines,
+                initial_capital=initial_capital,
             ): (fast, slow)
             for fast, slow in tasks
         }
@@ -1100,6 +1102,7 @@ def optimize_backtest_bayesian(
     start_date: str | None = None, end_date: str | None = None,
     metric: str = "sharpe",
     n_trials: int = 50,
+    initial_capital: float = 100000.0,
 ) -> dict[str, Any]:
     """Optuna TPE 贝叶斯参数优化 — 智能探索参数空间
 
@@ -1158,6 +1161,7 @@ def optimize_backtest_bayesian(
                 start_date=start_date, end_date=end_date,
                 benchmark_code=None, klines=pre_fetched_klines,
                 slippage_type="fixed_perc", slippage_value=0.001,
+                initial_capital=initial_capital,
             )
         except Exception:
             return float("-inf") if metric_direction == "maximize" else float("inf")
@@ -1265,6 +1269,7 @@ def walk_forward_analysis(
     slow_min: int = 10, slow_max: int = 120,
     metric: str = "sharpe",
     n_trials: int = 30,
+    initial_capital: float = 100000.0,
 ) -> dict[str, Any]:
     """Walk-Forward 样本外验证
 
@@ -1343,6 +1348,7 @@ def walk_forward_analysis(
         try:
             opt_result = optimize_backtest_bayesian(
                 code=code, strategy=strategy,
+                initial_capital=initial_capital,
                 fast_min=fast_min, fast_max=fast_max,
                 slow_min=slow_min, slow_max=slow_max,
                 start_date=win["train_start"], end_date=win["train_end"],
@@ -1368,6 +1374,7 @@ def walk_forward_analysis(
                 # BUG-7 修复: 传入预取的 K 线数据，避免每个窗口都重新发起网络请求
                 benchmark_code=None, klines=klines,
                 slippage_type="fixed_perc", slippage_value=0.001,
+                initial_capital=initial_capital,
             )
         except Exception:
             continue
@@ -1458,6 +1465,7 @@ def monte_carlo_test(
     fast_period: int = 5, slow_period: int = 20,
     start_date: str | None = None, end_date: str | None = None,
     n_simulations: int = 1000,
+    initial_capital: float = 100000.0,
 ) -> dict[str, Any]:
     """蒙特卡洛稳健性检验
 
@@ -1484,6 +1492,7 @@ def monte_carlo_test(
             start_date=start_date, end_date=end_date,
             benchmark_code=None,
             slippage_type="fixed_perc", slippage_value=0.001,
+            initial_capital=initial_capital,
         )
     except Exception as e:
         return {"error": f"原始回测失败: {e}"}
@@ -1655,6 +1664,7 @@ def handle_optimize(arguments: dict[str, Any]) -> dict[str, Any]:
     start_date = arguments.get("start_date"); end_date = arguments.get("end_date")
     metric = arguments.get("metric", "sharpe")
     n_trials = arguments.get("n_trials", 50)
+    initial_capital = arguments.get("initial_capital", 200000.0)
 
     if optimization_method == "bayesian":
         # Optuna TPE 贝叶斯优化
@@ -1664,6 +1674,7 @@ def handle_optimize(arguments: dict[str, Any]) -> dict[str, Any]:
             slow_min=slow_min, slow_max=slow_max,
             start_date=start_date, end_date=end_date,
             metric=metric, n_trials=n_trials,
+            initial_capital=initial_capital,
         )
     else:
         # 传统网格扫描
@@ -1681,7 +1692,8 @@ def handle_optimize(arguments: dict[str, Any]) -> dict[str, Any]:
 
         result = optimize_backtest(code=code, strategy=strategy, fast_range=fast_range, slow_range=slow_range,
                                    start_date=start_date, end_date=end_date, metric=metric,
-                                   max_workers=arguments.get("max_workers"))
+                                   max_workers=arguments.get("max_workers"),
+                                   initial_capital=initial_capital)
 
     _blogger.info("参数优化完成: %s strategy=%s method=%s", code, strategy, optimization_method)
     return result
@@ -1700,6 +1712,7 @@ def handle_walk_forward(arguments: dict[str, Any]) -> dict[str, Any]:
     slow_max = arguments.get("slow_max", 120)
     metric = arguments.get("metric", "sharpe")
     n_trials = arguments.get("n_trials", 30)
+    initial_capital = arguments.get("initial_capital", 200000.0)
 
     result = walk_forward_analysis(
         code=code, strategy=strategy,
@@ -1707,6 +1720,7 @@ def handle_walk_forward(arguments: dict[str, Any]) -> dict[str, Any]:
         fast_min=fast_min, fast_max=fast_max,
         slow_min=slow_min, slow_max=slow_max,
         metric=metric, n_trials=n_trials,
+        initial_capital=initial_capital,
     )
     if "error" in result:
         raise BacktestError(str(result["error"]))
@@ -1723,12 +1737,14 @@ def handle_monte_carlo(arguments: dict[str, Any]) -> dict[str, Any]:
     start_date = arguments.get("start_date")
     end_date = arguments.get("end_date")
     n_simulations = arguments.get("n_simulations", 1000)
+    initial_capital = arguments.get("initial_capital", 200000.0)
 
     result = monte_carlo_test(
         code=code, strategy=strategy,
         fast_period=fast_period, slow_period=slow_period,
         start_date=start_date, end_date=end_date,
         n_simulations=n_simulations,
+        initial_capital=initial_capital,
     )
     if "error" in result:
         raise BacktestError(str(result["error"]))

@@ -19,7 +19,7 @@ from mcp_finance.api import (
     handle_sector_ranking, handle_batch_quotes,
 )
 from mcp_finance.screener import handle_stock_screener
-from mcp_finance.backtest import handle_backtest
+from mcp_finance.backtest import handle_backtest, handle_optimize, handle_walk_forward, handle_monte_carlo
 from mcp_finance.analysis import handle_factor_screener
 from mcp_finance.data import STOCK_MAPPING, HOT_STOCKS
 from mcp_finance.logging_config import get_logger
