@@ -366,7 +366,7 @@ def api_screener():
                         continue
                     if args.get("min_market_cap") and (amount is None or amount < args["min_market_cap"] * 1e8):
                         continue
-                    if args.get("max_pe") or args.get("max_pb") or args.get("min_roe") or args.get("min_pb"):
+                    if args.get("max_pe") or args.get("max_pb") or args.get("min_roe") or args.get("min_pb") or args.get("min_gross_margin") or args.get("min_net_margin") or args.get("min_revenue_growth"):
                         continue  # TDX lacks fundamental data, skip filter
                     matched.append({
                         "代码": code,
@@ -389,7 +389,11 @@ def api_screener():
 
     # Fallback: AKShare (trading hours only, has PE/PB/ROE)
     if not raw or not raw.get("matched"):
-        raw = _safe_call(handle_stock_screener, args)
+        try:
+            raw = handle_stock_screener(args)
+        except Exception as e:
+            _log.warning(f"AKShare screener fallback: {e}")
+            raw = {"matched": [], "count": 0, "total_scanned": 0, "error": str(e)}
 
     if isinstance(raw, dict) and "matched" in raw:
         items = raw.get("matched", [])
@@ -411,7 +415,55 @@ def api_screener():
                 "净利率": _sf(it.get("净利率")),
                 "营收增长率": _sf(it.get("营收增长率")),
             })
-        # Tushare enrichment for TDX results (add PE/PB/ROE)
+        # Enrich TDX results with financial data (PE/PB/ROE/毛利率/净利率/营收增长率)
+        if normalized:
+            try:
+                # Use financial cache for ROE/毛利率/净利率/营收增长率 (fast, cached)
+                from mcp_finance.financials import preload_financials
+                codes = [it["代码"] for it in normalized]
+                fin_data = preload_financials(codes, max_workers=4)
+                for it in normalized:
+                    code = it["代码"]
+                    if code in fin_data:
+                        fd = fin_data[code]
+                        if not it.get("ROE") and fd.get("roe") is not None:
+                            it["ROE"] = fd["roe"]
+                        if not it.get("毛利率") and fd.get("gross_margin") is not None:
+                            it["毛利率"] = fd["gross_margin"]
+                        if not it.get("净利率") and fd.get("net_margin") is not None:
+                            it["净利率"] = fd["net_margin"]
+                        if not it.get("营收增长率") and fd.get("revenue_growth") is not None:
+                            it["营收增长率"] = fd["revenue_growth"]
+            except Exception:
+                pass
+
+            # Try AKShare snapshot for PE/PB/总市值 (with 8s timeout, don't block the response)
+            try:
+                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+                def _fetch_snap():
+                    from mcp_finance.api import get_all_a_stocks_snapshot
+                    return get_all_a_stocks_snapshot()
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    snap = pool.submit(_fetch_snap).result(timeout=8)
+                if snap:
+                    snap_map = {}
+                    for s in snap:
+                        sc = str(s.get("代码", "")).zfill(6)
+                        snap_map[sc] = s
+                    for it in normalized:
+                        code = it["代码"]
+                        if code in snap_map:
+                            s = snap_map[code]
+                            if not it.get("市盈率"):
+                                it["市盈率"] = _sf(s.get("市盈率"))
+                            if not it.get("市净率"):
+                                it["市净率"] = _sf(s.get("市净率"))
+                            if not it.get("总市值"):
+                                it["总市值"] = _sf(s.get("总市值"))
+            except Exception:
+                pass
+
+        # Tushare enrichment (only if explicitly enabled)
         if _ts_available() and normalized:
             try:
                 codes = [it["代码"] for it in normalized]
@@ -429,8 +481,11 @@ def api_screener():
 
         return jsonify({
             "data": normalized,
+            "matched": normalized,
+            "count": raw.get("count", len(normalized)),
+            "total_scanned": raw.get("total_scanned", 0),
             "error": None,
-            "meta": {"count": raw.get("count", 0), "scanned": raw.get("total_scanned", 0),
+            "meta": {"count": raw.get("count", len(normalized)), "scanned": raw.get("total_scanned", 0),
                      "source": raw.get("source", "AKShare") + ("+Tushare" if _ts_available() else "")}
         })
     return jsonify(raw)
