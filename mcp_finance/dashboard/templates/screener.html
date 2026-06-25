@@ -66,14 +66,14 @@ document.getElementById("factor-tbody").innerHTML=items.map(function(s){return'<
 
 async function runScreener(){
 var p={top_n:parseInt(document.getElementById("top_n").value)||30};
-var fieldIds=["min_gain","max_gain","min_turnover","min_volume_ratio","max_pe","max_pb","min_market_cap","min_roe"];fieldIds.forEach(function(id){var v=document.getElementById(id).value;if(v!==""&&v!==null)p[id]=parseFloat(v)});
+var fieldIds=["min_gain","max_gain","min_turnover","min_volume_ratio","max_pe","max_pb","min_market_cap","min_roe","min_gross_margin","min_net_margin","min_revenue_growth"];fieldIds.forEach(function(id){var v=document.getElementById(id).value;if(v!==""&&v!==null)p[id]=parseFloat(v)});
 var ld=document.getElementById("screen-loading"),er=document.getElementById("screen-error"),rd=document.getElementById("screen-result");
 rd.style.display="none";er.style.display="none";ld.style.display="block";
 try{var r=await fetch("/api/screener",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});var d=await r.json();ld.style.display="none";
 if(d.error){er.style.display="block";er.textContent=typeof d.error==="string"?d.error:(d.message||"Error");return}
 var items=d["matched"]||d.data||[];if(!items.length){er.style.display="block";er.textContent="暂无匹配结果（扫描: "+(d["total_scanned"]||0)+"只，条件: "+(JSON.stringify(d["conditions"]||{}))+"）";return}
 document.getElementById("screen-count").textContent="共 "+items.length+" 只（扫描: "+(d["total_scanned"]||0)+"只）";
-document.getElementById("screen-tbody").innerHTML=items.map(function(s){return'<tr><td class="cm">'+s["代码"]+'</td><td class="nm">'+s["名称"]+'</td><td class="pr">'+fm(s["最新价"],2)+'</td><td class="'+pc(s["涨跌幅"])+'">'+pf(s["涨跌幅"])+'</td><td class="mu">'+(s["换手率"]!=null?fm(s["换手率"],2)+"%":"--")+'</td><td class="mu">'+fm(s["市盈率"],1)+'</td><td class="mu">'+fm(s["市净率"],1)+'</td><td class="mu">'+fm(s["量比"],1)+'</td><td class="mu">'+fv(s["总市值"])+'</td></tr>'}).join("");rd.style.display="block"}catch(e){ld.style.display="none";er.style.display="block";er.textContent=e.message}}
+document.getElementById("screen-tbody").innerHTML=items.map(function(s){return'<tr><td class="cm">'+s["代码"]+'</td><td class="nm">'+s["名称"]+'</td><td class="pr">'+fm(s["最新价"],2)+'</td><td class="'+pc(s["涨跌幅"])+'">'+pf(s["涨跌幅"])+'</td><td class="mu">'+(s["换手率"]!=null?fm(s["换手率"],2)+"%":"--")+'</td><td class="mu">'+fm(s["市盈率"],1)+'</td><td class="mu">'+fm(s["市净率"],1)+'</td><td class="mu">'+fm(s["量比"],1)+'</td><td class="mu">'+(s["ROE"]!=null?fm(s["ROE"],1)+"%":"--")+'</td><td class="mu">'+(s["毛利率"]!=null?fm(s["毛利率"],1)+"%":"--")+'</td><td class="mu">'+(s["净利率"]!=null?fm(s["净利率"],1)+"%":"--")+'</td><td class="mu">'+(s["营收增长率"]!=null?fm(s["营收增长率"],1)+"%":"--")+'</td><td class="mu">'+fv(s["总市值"])+'</td></tr>'}).join("");rd.style.display="block"}catch(e){ld.style.display="none";er.style.display="block";er.textContent=e.message}}
 </script>
 </body>
 </html>

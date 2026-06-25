@@ -203,7 +203,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="get_financials",
-            description="获取股票核心财务数据（营收、净利润、ROE 等）。支持 A 股 (a) / 港股 (hk) / 美股 (us)，默认 a。港美股使用 yfinance 兜底",
+            description="获取股票财务数据：核心指标(营收/净利润/EPS/每股净资产)、盈利能力(ROE/ROA/毛利率/净利率)、成长能力(营收增长率/净利润增长率)、财务风险(资产负债率/流动比率)、营运能力(周转率)。支持 A 股 (a) / 港股 (hk) / 美股 (us)，默认 a。A股数据源 AKShare东方财富+同花顺双源，港美股 yfinance 兜底",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -278,7 +278,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="stock_screener",
-            description="全市场 A 股筛选：按涨跌幅、量比、换手率、市盈率、市净率、ROE、市值等条件筛选股票，返回匹配列表",
+            description="全市场 A 股筛选：按涨跌幅、量比、换手率、市盈率、市净率、ROE、毛利率、净利率、营收增长率、市值等条件筛选股票，返回匹配列表",
             inputSchema={
                 "type": "object",
                 "properties": {

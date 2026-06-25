@@ -264,6 +264,16 @@ def api_search():
                 break
     return jsonify({"data": matches, "error": None})
 
+@app.route("/api/financials")
+def api_financials():
+    """获取个股结构化财务数据"""
+    code = request.args.get("code", "600519")
+    market = request.args.get("market", "a")
+    count = int(request.args.get("count", 4))
+    return jsonify(_safe_call(handle_financials, {"code": code, "market": market, "count": count}))
+
+
+
 
 # ═══════════════ Screener ═══════════════
 @app.route("/api/screener", methods=["POST"])
@@ -355,14 +365,17 @@ def api_screener():
                 "代码": it.get("代码", ""),
                 "名称": it.get("名称", ""),
                 "最新价": _sf(it.get("最新价")),
-                "涨跌幅": _sf(it.get("涨跌幅(%)")),
-                "换手率": _sf(it.get("换手率(%)")),
-                "市盈率": _sf(it.get("市盈率(动)")),
-                "市净率": _sf(it.get("市净率(PB)")),
+                "涨跌幅": _sf(it.get("涨跌幅") or it.get("涨跌幅(%)")),
+                "换手率": _sf(it.get("换手率") or it.get("换手率(%)")),
+                "市盈率": _sf(it.get("市盈率") or it.get("市盈率(动)")),
+                "市净率": _sf(it.get("市净率") or it.get("市净率(PB)")),
                 "量比": _sf(it.get("量比")),
-                "总市值": _sf(it.get("总市值(元)")),
-                "振幅": _sf(it.get("振幅(%)")),
-                "ROE": _sf(it.get("ROE(%)")),
+                "总市值": _sf(it.get("总市值") or it.get("总市值(元)")),
+                "振幅": _sf(it.get("振幅") or it.get("振幅(%)")),
+                "ROE": _sf(it.get("ROE") or it.get("ROE(%)")),
+                "毛利率": _sf(it.get("毛利率")),
+                "净利率": _sf(it.get("净利率")),
+                "营收增长率": _sf(it.get("营收增长率")),
             })
         # Tushare enrichment for TDX results (add PE/PB/ROE)
         if _ts_available() and normalized:

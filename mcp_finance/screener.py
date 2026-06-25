@@ -67,7 +67,9 @@ def screen_stocks(
     min_pb: float | None = None,
     max_pb: float | None = None,
     min_roe: float | None = None,
-    
+    min_gross_margin: float | None = None,
+    min_net_margin: float | None = None,
+    min_revenue_growth: float | None = None,
     top_n: int = 50,
 ) -> dict[str, Any]:
     """
@@ -87,6 +89,9 @@ def screen_stocks(
         "min_pb": min_pb,
         "max_pb": max_pb,
         "min_roe": min_roe,
+        "min_gross_margin": min_gross_margin,
+        "min_net_margin": min_net_margin,
+        "min_revenue_growth": min_revenue_growth,
     }
 
     def _f(val: Any) -> float | None:
@@ -99,7 +104,10 @@ def screen_stocks(
 
     # ── 判断是否需要慢速维度 ──
     need_roe = min_roe is not None
-    need_slow = need_roe
+    need_gross_margin = min_gross_margin is not None
+    need_net_margin = min_net_margin is not None
+    need_revenue_growth = min_revenue_growth is not None
+    need_slow = need_roe or need_gross_margin or need_net_margin or need_revenue_growth
 
     # ── 第一遍：快速维度过滤 ──
     candidates: list[dict[str, Any]] = []
@@ -146,15 +154,21 @@ def screen_stocks(
 
             candidate_codes = [item["f12"] for item in candidates if item.get("f12")]
 
-            # ROE: 批量并行获取
-            if need_roe and candidate_codes:
+            # 财务指标: 批量并行获取（ROE/毛利率/净利率/营收增长率）
+            if need_slow and candidate_codes:
                 fin_results = preload_financials(candidate_codes, max_workers=4)
                 for item in candidates:
                     code = item.get("f12", "")
                     if code and code in fin_results:
                         fin = fin_results[code]
-                        if fin.get("roe") is not None:
+                        if need_roe and fin.get("roe") is not None:
                             item["f37"] = fin["roe"]
+                        if need_gross_margin and fin.get("gross_margin") is not None:
+                            item["_gross_margin"] = fin["gross_margin"]
+                        if need_net_margin and fin.get("net_margin") is not None:
+                            item["_net_margin"] = fin["net_margin"]
+                        if need_revenue_growth and fin.get("revenue_growth") is not None:
+                            item["_revenue_growth"] = fin["revenue_growth"]
 
             # 主力净流入: 批量获取
     matched: list[dict[str, Any]] = []
@@ -174,6 +188,18 @@ def screen_stocks(
         # 慢速维度过滤（仅当数据可用时才过滤）
         if min_roe is not None and roe is not None and roe < min_roe:
             continue
+        if min_gross_margin is not None:
+            gm = _f(item.get("_gross_margin"))
+            if gm is not None and gm < min_gross_margin:
+                continue
+        if min_net_margin is not None:
+            nm = _f(item.get("_net_margin"))
+            if nm is not None and nm < min_net_margin:
+                continue
+        if min_revenue_growth is not None:
+            rg = _f(item.get("_revenue_growth"))
+            if rg is not None and rg < min_revenue_growth:
+                continue
 
         matched.append({
             "代码": code,
@@ -186,6 +212,9 @@ def screen_stocks(
             "市盈率": pe,
             "市净率": pb,
             "ROE": roe,
+            "毛利率": _f(item.get("_gross_margin")),
+            "净利率": _f(item.get("_net_margin")),
+            "营收增长率": _f(item.get("_revenue_growth")),
             "股息率": dividend,
             "总市值": market_cap,
             "今开": item.get("f17"),
@@ -230,6 +259,9 @@ def handle_stock_screener(arguments: dict[str, Any]) -> dict[str, Any]:
         min_pb=arguments.get("min_pb"),
         max_pb=arguments.get("max_pb"),
         min_roe=arguments.get("min_roe"),
+        min_gross_margin=arguments.get("min_gross_margin"),
+        min_net_margin=arguments.get("min_net_margin"),
+        min_revenue_growth=arguments.get("min_revenue_growth"),
         top_n=arguments.get("top_n", 50),
     )
     if not result.get("matched"):

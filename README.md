@@ -13,7 +13,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/MCP-1.4+-purple" alt="MCP">
-  <img src="https://img.shields.io/badge/version-0.9.5-orange" alt="v0.9.0">
+  <img src="https://img.shields.io/badge/version-0.9.6-orange" alt="v0.9.0">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT">
 </p>
 
@@ -46,7 +46,7 @@
 | **验证** | Walk-Forward 样本外 + 蒙特卡洛稳健性 | 无交叉验证 |
 | **滑点** | 固定百分比 / 固定点数 / bar_impact / volume_share | 无真实 tick 级模拟 |
 | **手续费** | A股万分之三 + 港美股差异化费率 | 无 min 佣金 |
-| **财务** | PE/PB/ROE/股息率/市值等核心指标 | 无明细财报、一致预期、盈利预测 |
+| **财务** | 19+核心指标(营收/净利润/EPS/ROE/ROA/毛利率/净利率/营收增长率/资产负债率/流动比率等)，5大分类(核心/盈利/成长/风险/营运)，历史明细(同花顺) | 无一致预期、盈利预测 |
 | **高频数据** | A股 1/5/15/30/60 分钟 K 线 | 港美股无分钟数据 |
 | **市场覆盖** | A股 / 港股 / 美股 / 国内期货 | 无期权/外汇/加密货币 |
 
@@ -168,7 +168,7 @@ $env:TUSHARE_TOKEN="你的token"    # Windows PowerShell
 ### 财务与市场
 | 工具 | 说明 |
 |------|------|
-| `get_financials` | 核心财务数据（营收/净利润/ROE等） |
+| `get_financials` | 结构化财务数据：5类19+指标(营收/净利润/EPS/ROE/ROA/毛利率/净利率/营收增长率/资产负债率/流动比率等)+历史明细 |
 | `get_sector_ranking` | 行业/概念板块涨幅排行 |
 | `get_north_flow` | 北向/南向资金流向 |
 | `get_dragon_tiger` | 龙虎榜每日明细 |
@@ -332,7 +332,7 @@ pytest tests/ -v
 
 ### 专业深度不足
 
-- **财务数据**：仅覆盖 PE/PB/ROE 等核心指标，颗粒度粗，无明细财报、一致预期、盈利预测等高阶基本面数据
+- **财务数据**：覆盖 19+ 核心指标（营收/净利润/EPS/ROE/ROA/毛利率/净利率/营收增长率/资产负债率/流动比率等），分5大类结构化返回。仍缺失明细财报（三表）、一致预期、盈利预测等高阶基本面数据
 - **高频数据**：分钟 K 线仅支持 A 股，港美股无高频数据
 - **回测能力**：偏入门级别，仅 8 种预设策略，参数优化为简单网格扫描，不支持自定义复杂策略、滑点/手续费精细化模拟，无法满足专业量化需求
 

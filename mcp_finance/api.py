@@ -821,21 +821,68 @@ def get_kline_futures(code, period="daily", limit=120):
 # ================================================================
 
 def get_financials_a(code, count=4):
-    """A股财务数据"""
-    ak = _get_ak()
-    try:
-        df = _call_with_net_timeout(lambda: ak.stock_financial_abstract_ths(symbol=code, indicator="按报告期"))
-        if df is None or df.empty:
-            return {"提示": f"未找到 {code} 的财务数据"}
-        df = df.tail(count)
-        return {
-            "股票代码": code,
-            "财务期数": len(df),
-            "数据": _df_to_records(df),
-            "数据源": "AKShare-同花顺",
+    """A股财务数据 — 返回结构化分类指标 + 历史明细"""
+    from mcp_finance.financials import get_financial_indicators
+    
+    # 1. 获取结构化核心指标（来自东方财富 stock_financial_abstract, 缓存24h）
+    fin = get_financial_indicators(code)
+    
+    indicators = {}
+    if fin and not fin.get("_error"):
+        indicators = {
+            "核心指标": {
+                "营业总收入(元)": fin.get("revenue"),
+                "归母净利润(元)": fin.get("net_profit"),
+                "基本每股收益": fin.get("eps"),
+                "每股净资产": fin.get("bvps"),
+                "每股经营现金流": fin.get("cfps"),
+                "净资产(元)": fin.get("equity"),
+                "经营现金流净额(元)": fin.get("operating_cf"),
+            },
+            "盈利能力": {
+                "ROE(%)": fin.get("roe"),
+                "ROA(%)": fin.get("roa"),
+                "毛利率(%)": fin.get("gross_margin"),
+                "销售净利率(%)": fin.get("net_margin"),
+                "营业利润率(%)": fin.get("operating_margin"),
+            },
+            "成长能力": {
+                "营收增长率(%)": fin.get("revenue_growth"),
+                "净利润增长率(%)": fin.get("net_profit_growth"),
+            },
+            "财务风险": {
+                "资产负债率(%)": fin.get("debt_ratio"),
+                "流动比率": fin.get("current_ratio"),
+                "速动比率": fin.get("quick_ratio"),
+            },
+            "营运能力": {
+                "总资产周转率": fin.get("asset_turnover"),
+                "存货周转率": fin.get("inventory_turnover"),
+            },
         }
-    except Exception as e:
-        return {"error": f"获取财务数据失败: {e}"}
+    
+    # 2. 获取历史明细（来自同花顺 stock_financial_abstract_ths）
+    history = {"数据": [], "数据源": "AKShare-同花顺"}
+    try:
+        ak = _get_ak()
+        df = _call_with_net_timeout(lambda: ak.stock_financial_abstract_ths(symbol=code, indicator="按报告期"))
+        if df is not None and not df.empty:
+            df = df.tail(count)
+            history["数据"] = _df_to_records(df)
+            history["期数"] = len(df)
+    except Exception:
+        pass
+    
+    error_note = fin.get("_error", "") if fin else "no_cache"
+    result = {
+        "股票代码": code,
+        "财务指标": indicators,
+        "历史明细": history,
+        "数据源": "AKShare-东方财富+同花顺",
+    }
+    if error_note:
+        result["_note"] = f"部分指标获取异常: {error_note}"
+    return result
 
 
 # ================================================================
