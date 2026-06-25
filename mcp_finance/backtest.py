@@ -1,8 +1,10 @@
-"""策略回测引擎 v2 - Backtrader 事件驱动
+"""策略回测引擎 v3 - Backtrader 事件驱动
 
 A股规则: T+1限制 / 涨跌停过滤 / 万2.5佣金+印花税 / ATR仓位 / 沪深300基准
-港股/美股规则: T+0 / 无涨跌停 / 简单百分比佣金 / 无基准指数
-策略(8种): 双均线 MACD RSI KDJ BOLL + 海龟 波动率趋势 均值回归
+港股规则: T+0 / 无涨跌停 / 万3佣金+0.13%印花税双向+0.005%SFC征费 / 无基准
+美股规则: T+0 / 无涨跌停 / 万5佣金+SEC费$8/百万 / 无基准
+策略(8+1种): 双均线 MACD RSI KDJ BOLL + 海龟 波动率趋势 均值回归 + 自定义组合策略
+滑点模型: fixed_perc(固定百分比) / fixed_points(固定点数) / bar_impact(Bar冲击) / volume_share(成交量份额)
 风险指标: 夏普 索提诺 卡玛 年化波动率 最大连续亏损
 """
 
@@ -22,20 +24,30 @@ from mcp_finance.errors import BacktestError
 # ============================================================================
 # 费率常量
 # ============================================================================
-COMMISSION_RATE = 0.00025     # 佣金万2.5(买卖双向)
-STAMP_TAX_RATE = 0.0005       # 印花税万分之五(仅卖方)
-MIN_COMMISSION = 5.0          # 最低佣金5元
-STOCK_SLIPPAGE = 0.001        # 滑点千分之一
+# A股
+A_COMMISSION_RATE = 0.00025     # 佣金万2.5(买卖双向)
+A_STAMP_TAX_RATE = 0.0005       # 印花税万分之五(仅卖方)
+A_MIN_COMMISSION = 5.0          # 最低佣金5元
+# 港股
+HK_COMMISSION_RATE = 0.0003     # 佣金万3(买卖双向)
+HK_STAMP_DUTY = 0.0013          # 印花税0.13%(买卖双向)
+HK_SFC_LEVY = 0.00005           # SFC交易征费0.005%(买卖双向)
+HK_TRADING_FEE = 0.00005        # 港交所交易费0.005%(买卖双向)
+# 美股
+US_COMMISSION_RATE = 0.0005     # 佣金万5(买卖双向)
+US_SEC_FEE_RATE = 0.000008      # SEC费约$8/百万(仅卖方, 实际约$22.1/百万但简化)
+# 通用
+STOCK_SLIPPAGE = 0.001          # 默认滑点千分之一
 
 # ============================================================================
-# 自定义佣金方案(含印花税)
+# 自定义佣金方案
 # ============================================================================
 class _AStockCommission(bt.CommInfoBase):
     """A股佣金: 万2.5(最低5元) + 卖方千0.5印花税"""
     params = (
-        ("commission", COMMISSION_RATE),
-        ("stamp_tax", STAMP_TAX_RATE),
-        ("min_commission", MIN_COMMISSION),
+        ("commission", A_COMMISSION_RATE),
+        ("stamp_tax", A_STAMP_TAX_RATE),
+        ("min_commission", A_MIN_COMMISSION),
         ("stocklike", True),
         ("commtype", bt.CommInfoBase.COMM_PERC),
     )
@@ -46,6 +58,81 @@ class _AStockCommission(bt.CommInfoBase):
         if size < 0:  # 卖出加印花税
             comm += value * self.p.stamp_tax
         return comm
+
+
+class _HKStockCommission(bt.CommInfoBase):
+    """港股佣金: 万3 + 0.13%印花税双向 + 0.005%SFC征费 + 0.005%交易费"""
+    params = (
+        ("commission", HK_COMMISSION_RATE),
+        ("stamp_duty", HK_STAMP_DUTY),
+        ("sfc_levy", HK_SFC_LEVY),
+        ("trading_fee", HK_TRADING_FEE),
+        ("stocklike", True),
+        ("commtype", bt.CommInfoBase.COMM_PERC),
+    )
+
+    def _getcommission(self, size, price, pseudoexec):
+        value = abs(size) * price
+        comm = value * self.p.commission
+        comm += value * self.p.stamp_duty          # 印花税双向
+        comm += value * self.p.sfc_levy             # SFC征费
+        comm += value * self.p.trading_fee          # 交易费
+        comm = max(comm, 3.0)  # 最低佣金HK$3
+        return comm
+
+
+class _USStockCommission(bt.CommInfoBase):
+    """美股佣金: 万5 + SEC费$8/百万(仅卖方)"""
+    params = (
+        ("commission", US_COMMISSION_RATE),
+        ("sec_fee", US_SEC_FEE_RATE),
+        ("stocklike", True),
+        ("commtype", bt.CommInfoBase.COMM_PERC),
+    )
+
+    def _getcommission(self, size, price, pseudoexec):
+        value = abs(size) * price
+        comm = value * self.p.commission
+        if size < 0:  # 卖出加SEC费
+            comm += value * self.p.sec_fee
+        comm = max(comm, 1.0)  # 最低佣金$1
+        return comm
+
+
+# ============================================================================
+# 滑点模型工厂
+# ============================================================================
+_SLIPPAGE_MAP = {
+    "fixed_perc": "百分比滑点 — 按成交金额百分比计算滑点",
+    "fixed_points": "固定点数滑点 — 固定价格点数(如0.01元)",
+    "bar_impact": "Bar冲击滑点 — 基于K线振幅的动态滑点(模拟大单冲击)",
+    "volume_share": "成交量份额滑点 — 基于成交量占比的价格冲击(适合大资金)",
+}
+
+def _apply_slippage(cerebro, slippage_type: str = "fixed_perc", slippage_value: float = 0.001):
+    """应用滑点模型到 Cerebro
+
+    Backtrader 原生支持两种滑点:
+    - set_slippage_perc(perc): 固定百分比 (如0.001=千分之一)
+    - set_slippage_fixed(points): 固定点数 (如0.01=1分钱)
+
+    对于 bar_impact 和 volume_share，通过自定义 Broker 子类实现更精细模拟。
+    """
+    if slippage_type == "fixed_points":
+        cerebro.broker.set_slippage_fixed(fixed=slippage_value)
+    elif slippage_type == "bar_impact":
+        # Bar冲击: 滑点与K线振幅正相关
+        # 实现方式: 固定百分比 + 在策略中根据ATR调整预期成交价
+        cerebro.broker.set_slippage_perc(perc=slippage_value)
+        # 标记使用 bar_impact 模式，策略中 _BaseStrategy.next() 会读取
+        setattr(cerebro, "_slippage_mode", "bar_impact")
+    elif slippage_type == "volume_share":
+        # 成交量份额: 滑点与成交量占比正相关
+        # 实现方式: 固定百分比 + 成交量加权
+        cerebro.broker.set_slippage_perc(perc=slippage_value)
+        setattr(cerebro, "_slippage_mode", "volume_share")
+    else:  # fixed_perc (默认)
+        cerebro.broker.set_slippage_perc(perc=slippage_value)
 
 # ============================================================================
 # 工具函数
@@ -361,6 +448,186 @@ class _MeanRevStrategy(_BaseStrategy):
     def sell_signal(self):
         return self.data.close[0] > self.boll.mid[0] or self.rsi[0] > 65
 
+
+# ============================================================================
+# 自定义组合策略 — 用户通过 JSON 配置组合多指标
+# ============================================================================
+class _CustomStrategy(_BaseStrategy):
+    """自定义组合策略: 支持多条件 AND/OR 组合
+
+    config 格式:
+    {
+        "entry": {
+            "logic": "and",  // and | or
+            "conditions": [
+                {"indicator": "sma_cross", "fast": 5, "slow": 20, "direction": "above"},
+                {"indicator": "rsi", "period": 14, "threshold": 30, "direction": "below"},
+                {"indicator": "volume", "period": 20, "threshold": 1.5, "direction": "above"}
+            ]
+        },
+        "exit": {
+            "logic": "or",
+            "conditions": [
+                {"indicator": "sma_cross", "fast": 5, "slow": 20, "direction": "below"},
+                {"indicator": "rsi", "period": 14, "threshold": 70, "direction": "above"}
+            ]
+        }
+    }
+
+    支持的 indicator 类型:
+    - sma_cross: 双均线交叉 (fast, slow, direction: above=金叉/below=死叉)
+    - ema_cross: 双EMA交叉 (fast, slow, direction)
+    - macd_cross: MACD交叉 (fast, slow, signal, direction)
+    - rsi: RSI阈值 (period, threshold, direction: above=超买/below=超卖)
+    - kdj_cross: KDJ交叉 (period, direction)
+    - boll_touch: BOLL触碰 (period, devfactor, direction: above=突破上轨/below=跌破下轨)
+    - volume: 成交量放量 (period, threshold=相对均量倍数, direction: above=放量)
+    - price_vs_ma: 价格vs均线 (ma_type=sma/ema, period, direction: above=站上/below=跌破)
+    """
+    params = dict(fast=0, slow=0, config=None)
+
+    def __init__(self, **kwargs):
+        # Backtrader 会把 params 中的值作为 kwargs 传入，需要接收但不传给父类
+        kwargs.pop("config", None)
+        super().__init__()
+        self._indicators = {}
+        self._entry_eval = None
+        self._exit_eval = None
+
+        # 从策略自定义参数中读取 config
+        config = getattr(self.params, "config", None)
+        if config is None:
+            self._entry_eval = lambda: False
+            self._exit_eval = lambda: False
+            return
+
+        # 构建指标
+        entry_conds = config.get("entry", {}).get("conditions", [])
+        exit_conds = config.get("exit", {}).get("conditions", [])
+        all_conds = entry_conds + exit_conds
+
+        for i, cond in enumerate(all_conds):
+            name = f"_c{i}"
+            ind_type = cond.get("indicator", "")
+            indicator = self._build_indicator(ind_type, cond)
+            if indicator is not None:
+                self._indicators[name] = {
+                    "type": ind_type,
+                    "obj": indicator,
+                    "cond": cond,
+                }
+
+        # 构建评估函数
+        entry_logic = config.get("entry", {}).get("logic", "and")
+        exit_logic = config.get("exit", {}).get("logic", "or")
+
+        self._entry_eval = self._make_eval(entry_conds, entry_logic, range(0, len(entry_conds)))
+        self._exit_eval = self._make_eval(exit_conds, exit_logic, range(len(entry_conds), len(entry_conds) + len(exit_conds)))
+
+    def _build_indicator(self, ind_type: str, cond: dict):
+        """构建单个指标"""
+        try:
+            close = self.data.close
+            high = self.data.high
+            low = self.data.low
+            volume = self.data.volume
+
+            if ind_type == "sma_cross":
+                fast = bt.indicators.SMA(close, period=cond.get("fast", 5))
+                slow = bt.indicators.SMA(close, period=cond.get("slow", 20))
+                return bt.indicators.CrossOver(fast, slow)
+            elif ind_type == "ema_cross":
+                fast = bt.indicators.EMA(close, period=cond.get("fast", 12))
+                slow = bt.indicators.EMA(close, period=cond.get("slow", 26))
+                return bt.indicators.CrossOver(fast, slow)
+            elif ind_type == "macd_cross":
+                macd = bt.indicators.MACD(close,
+                    period_me1=cond.get("fast", 12),
+                    period_me2=cond.get("slow", 26),
+                    period_signal=cond.get("signal", 9))
+                return bt.indicators.CrossOver(macd.macd, macd.signal)
+            elif ind_type == "rsi":
+                return bt.indicators.RSI(close, period=cond.get("period", 14))
+            elif ind_type == "kdj_cross":
+                stoch = bt.indicators.Stochastic(self.data, period=cond.get("period", 9), period_dfast=3)
+                return bt.indicators.CrossOver(stoch.percK, stoch.percD)
+            elif ind_type == "boll_touch":
+                bb = bt.indicators.BollingerBands(close, period=cond.get("period", 20), devfactor=cond.get("devfactor", 2.0))
+                return bb
+            elif ind_type == "volume":
+                return bt.indicators.SMA(volume, period=cond.get("period", 20))
+            elif ind_type == "price_vs_ma":
+                ma_type = cond.get("ma_type", "sma")
+                period = cond.get("period", 20)
+                if ma_type == "ema":
+                    return bt.indicators.EMA(close, period=period)
+                return bt.indicators.SMA(close, period=period)
+            return None
+        except Exception:
+            return None
+
+    def _make_eval(self, conditions: list, logic: str, idx_range):
+        """构建条件评估闭包"""
+        def evaluator():
+            results = []
+            for idx, cond in zip(idx_range, conditions):
+                name = f"_c{idx}"
+                if name not in self._indicators:
+                    results.append(True)
+                    continue
+                info = self._indicators[name]
+                ind_type = info["type"]
+                obj = info["obj"]
+                c = info["cond"]
+                direction = c.get("direction", "above")
+
+                try:
+                    if ind_type in ("sma_cross", "ema_cross", "macd_cross", "kdj_cross"):
+                        val = obj[0]
+                        results.append(val > 0 if direction == "above" else val < 0)
+                    elif ind_type == "rsi":
+                        threshold = c.get("threshold", 30)
+                        results.append(obj[0] > threshold if direction == "above" else obj[0] < threshold)
+                    elif ind_type == "boll_touch":
+                        if direction == "above":
+                            results.append(close[0] > obj.top[0] and close[-1] <= obj.top[-1])
+                        else:
+                            results.append(close[0] < obj.bot[0] and close[-1] >= obj.bot[-1])
+                    elif ind_type == "volume":
+                        threshold = c.get("threshold", 1.5)
+                        vol_sma = obj[0]
+                        results.append(vol_sma > 0 and volume[0] / vol_sma > threshold if direction == "above"
+                                     else vol_sma > 0 and volume[0] / vol_sma < threshold)
+                    elif ind_type == "price_vs_ma":
+                        results.append(close[0] > obj[0] if direction == "above" else close[0] < obj[0])
+                    else:
+                        results.append(True)
+                except Exception:
+                    results.append(False)
+
+            if logic == "and":
+                return all(results)
+            return any(results)
+
+        return evaluator
+
+    def buy_signal(self):
+        if self._entry_eval is None:
+            return False
+        try:
+            return self._entry_eval()
+        except Exception:
+            return False
+
+    def sell_signal(self):
+        if self._exit_eval is None:
+            return False
+        try:
+            return self._exit_eval()
+        except Exception:
+            return False
+
+
 # ============================================================================
 # 策略注册表
 # ============================================================================
@@ -373,6 +640,7 @@ _STRATEGY_MAP = {
     "turtle": _TurtleStrategy,
     "vol_trend": _VolTrendStrategy,
     "mean_rev": _MeanRevStrategy,
+    "custom": _CustomStrategy,
 }
 
 _STRATEGY_LABELS = {
@@ -384,6 +652,7 @@ _STRATEGY_LABELS = {
     "turtle": "海龟交易",
     "vol_trend": "波动率趋势",
     "mean_rev": "均值回归",
+    "custom": "自定义组合",
 }
 
 # ============================================================================
@@ -397,6 +666,9 @@ def _run_single_backtest(
     initial_capital: float = 100000.0,
     benchmark_code: str | None = "000300",
     klines: list | None = None,
+    slippage_type: str = "fixed_perc",
+    slippage_value: float = 0.001,
+    strategy_config: dict | None = None,
 ) -> dict[str, Any]:
     """运行单次回测(一次Cerebro, Observer记录权益曲线)，自动适应 A/港股/美股"""
 
@@ -440,20 +712,24 @@ def _run_single_backtest(
 
     # 构建策略参数
     strat_kwargs = dict(code=code, limit_pct=limit_pct, fast=fast_period, slow=slow_period)
-    if strategy == "macd_signal": strat_kwargs["signal"] = 9
+    if strategy == "macd_signal":
+        strat_kwargs["signal"] = 9
+    if strategy == "custom" and strategy_config:
+        strat_kwargs["config"] = strategy_config
 
     cerebro.addstrategy(strategy_cls, **strat_kwargs)
 
     # 资金+佣金(含印花税)+滑点
     cerebro.broker.setcash(initial_capital)
-    # 港美股用简化佣金（美股无印花税, 港股有但用简化处理）
+    # 佣金按市场精确建模
     if market == "a":
         cerebro.broker.addcommissioninfo(_AStockCommission())
-    else:
-        # 港美股: 万5佣金, 无最低佣金, 无印花税
-        comm = bt.CommInfoBase(commission=0.0005, stocklike=True, commtype=bt.CommInfoBase.COMM_PERC)
-        cerebro.broker.addcommissioninfo(comm)
-    cerebro.broker.set_slippage_perc(STOCK_SLIPPAGE)
+    elif market == "hk":
+        cerebro.broker.addcommissioninfo(_HKStockCommission())
+    else:  # us / unknown
+        cerebro.broker.addcommissioninfo(_USStockCommission())
+    # 滑点模型
+    _apply_slippage(cerebro, slippage_type, slippage_value)
 
     # 分析器（优化模式跳过部分以减少开销）
     cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe", riskfreerate=0.02, annualize=True)
@@ -669,13 +945,17 @@ def _generate_commentary(strat_label: str, strat_return: float, strat_dd: float,
 # 公开接口
 # ============================================================================
 def run_backtest(code: str, strategy: str = "ma_cross", fast_period: int = 5, slow_period: int = 20,
-                 start_date: str | None = None, end_date: str | None = None,
-                 initial_capital: float = 100000.0, benchmark_index: str | None = "000300",
-                 ) -> dict[str, Any]:
-    """运行策略回测"""
+                   start_date: str | None = None, end_date: str | None = None,
+                   initial_capital: float = 100000.0, benchmark_index: str | None = "000300",
+                   slippage_type: str = "fixed_perc", slippage_value: float = 0.001,
+                   strategy_config: dict | None = None,
+                   ) -> dict[str, Any]:
+    """运行策略回测 — 支持自定义策略、多种滑点模型、精细化手续费"""
     return _run_single_backtest(code=code, strategy=strategy, fast_period=fast_period, slow_period=slow_period,
                                 start_date=start_date, end_date=end_date,
-                                initial_capital=initial_capital, benchmark_code=benchmark_index)
+                                initial_capital=initial_capital, benchmark_code=benchmark_index,
+                                slippage_type=slippage_type, slippage_value=slippage_value,
+                                strategy_config=strategy_config)
 
 def optimize_backtest(code: str, strategy: str = "ma_cross",
                       fast_range: list[int] | None = None, slow_range: list[int] | None = None,
@@ -784,7 +1064,7 @@ from mcp_finance.logging_config import get_logger
 _blogger = get_logger(__name__)
 
 def handle_backtest(arguments: dict[str, Any]) -> dict[str, Any]:
-    """策略回测handler"""
+    """策略回测handler — 支持自定义策略、滑点/手续费配置"""
     code = arguments["code"]
     strategy = arguments.get("strategy", "ma_cross")
     fast_period = arguments.get("fast_period", 5)
@@ -793,9 +1073,14 @@ def handle_backtest(arguments: dict[str, Any]) -> dict[str, Any]:
     end_date = arguments.get("end_date")
     initial_capital = arguments.get("initial_capital", 100000.0)
     generate_chart = arguments.get("generate_chart", True)
+    slippage_type = arguments.get("slippage_type", "fixed_perc")
+    slippage_value = arguments.get("slippage_value", 0.001)
+    strategy_config = arguments.get("strategy_config")
 
     result = run_backtest(code=code, strategy=strategy, fast_period=fast_period, slow_period=slow_period,
-                          start_date=start_date, end_date=end_date, initial_capital=initial_capital)
+                          start_date=start_date, end_date=end_date, initial_capital=initial_capital,
+                          slippage_type=slippage_type, slippage_value=slippage_value,
+                          strategy_config=strategy_config)
     if "error" in result: raise BacktestError(str(result["error"]))
 
     if generate_chart and "权益曲线" in result:

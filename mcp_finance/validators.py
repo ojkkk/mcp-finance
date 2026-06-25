@@ -127,12 +127,15 @@ class BacktestParams(StockCodeModel):
     end_date: Optional[str] = Field(default=None, description="结束日期 YYYY-MM-DD")
     initial_capital: float = Field(default=100000.0, ge=1000, le=1e9)
     generate_chart: bool = Field(default=True)
+    slippage_type: str = Field(default="fixed_perc", description="滑点模型")
+    slippage_value: float = Field(default=0.001, ge=0.0, le=0.1)
+    strategy_config: Optional[dict] = Field(default=None, description="自定义策略配置")
 
     @field_validator("strategy")
     @classmethod
     def validate_strategy(cls, v: str) -> str:
-        if v not in {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal", "turtle", "vol_trend", "mean_rev"}:
-            raise ValueError("strategy 必须是 ma_cross/macd_signal/rsi_signal/kdj_signal/boll_signal/turtle/vol_trend/mean_rev")
+        if v not in {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal", "turtle", "vol_trend", "mean_rev", "custom"}:
+            raise ValueError("strategy 必须是 ma_cross/macd_signal/rsi_signal/kdj_signal/boll_signal/turtle/vol_trend/mean_rev/custom")
         return v
 
     @field_validator("fast_period")
@@ -175,8 +178,8 @@ class OptimizeParams(StockCodeModel):
     @field_validator("strategy")
     @classmethod
     def validate_strategy(cls, v: str) -> str:
-        if v not in {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal", "turtle", "vol_trend", "mean_rev"}:
-            raise ValueError("strategy 必须是 ma_cross/macd_signal/rsi_signal/kdj_signal/boll_signal/turtle/vol_trend/mean_rev")
+        if v not in {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal", "turtle", "vol_trend", "mean_rev", "custom"}:
+            raise ValueError("strategy 必须是 ma_cross/macd_signal/rsi_signal/kdj_signal/boll_signal/turtle/vol_trend/mean_rev/custom")
         return v
 
 

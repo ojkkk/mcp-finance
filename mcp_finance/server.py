@@ -317,7 +317,7 @@ async def list_tools() -> list[types.Tool]:
                 "type": "object",
                 "properties": {
                     "code": {"type": "string", "description": "股票代码，如 '000333'(A股) / '00700'(港股) / 'AAPL'(美股)"},
-                    "strategy": {"type": "string", "description": "策略: ma_cross=双均线, macd_signal=MACD, rsi_signal=RSI, kdj_signal=KDJ, boll_signal=BOLL"},
+                    "strategy": {"type": "string", "description": "策略: ma_cross=双均线, macd_signal=MACD, rsi_signal=RSI, kdj_signal=KDJ, boll_signal=BOLL, custom=自定义组合"},
                     "fast_min": {"type": "integer", "description": "快线最小值"},
                     "fast_max": {"type": "integer", "description": "快线最大值"},
                     "fast_step": {"type": "integer", "description": "快线步长"},
@@ -603,7 +603,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
                 sys.stdout = old_stdout
 
         # optimize_strategy 需要更长时间
-        timeout = 180.0 if name == "optimize_strategy" else 90.0
+        timeout = 180.0 if name == "optimize_strategy" else 120.0 if name == "backtest_strategy" else 90.0
         result = await asyncio.wait_for(asyncio.to_thread(_safe_handler), timeout=timeout)
         return [types.TextContent(type="text", text=_format_json(result))]
     except asyncio.TimeoutError:
