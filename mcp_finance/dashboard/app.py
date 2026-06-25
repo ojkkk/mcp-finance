@@ -14,6 +14,11 @@ from mcp_finance.api import (
 from mcp_finance.screener import handle_stock_screener
 from mcp_finance.backtest import handle_backtest
 from mcp_finance.data import HOT_STOCKS, STOCK_MAPPING
+try:
+    from mcp_finance.tushare_source import is_available as _ts_available, get_financial_indicators_batch as _ts_fin_batch
+except ImportError:
+    _ts_available = lambda: False
+    _ts_fin_batch = lambda codes: {}
 
 import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -352,11 +357,27 @@ def api_screener():
                 "振幅": _sf(it.get("振幅(%)")),
                 "ROE": _sf(it.get("ROE(%)")),
             })
+        # Tushare enrichment for TDX results (add PE/PB/ROE)
+        if _ts_available() and normalized:
+            try:
+                codes = [it["代码"] for it in normalized]
+                fin_data = _ts_fin_batch(codes)
+                for it in normalized:
+                    code = it["代码"]
+                    if code in fin_data:
+                        fd = fin_data[code]
+                        if fd.get("pe") and not it.get("市盈率"): it["市盈率"] = fd["pe"]
+                        if fd.get("pb") and not it.get("市净率"): it["市净率"] = fd["pb"]
+                        if fd.get("roe"): it["ROE"] = fd["roe"]
+                        if fd.get("总市值(元)"): it["总市值"] = fd["总市值(元)"]
+            except Exception:
+                pass
+
         return jsonify({
             "data": normalized,
             "error": None,
             "meta": {"count": raw.get("count", 0), "scanned": raw.get("total_scanned", 0),
-                     "source": raw.get("source", "AKShare")}
+                     "source": raw.get("source", "AKShare") + ("+Tushare" if _ts_available() else "")}
         })
     return jsonify(raw)
 
@@ -470,6 +491,21 @@ def api_factor():
     scored.sort(key=lambda x: x["综合评分"], reverse=True)
     top = scored[:top_n]
 
+    # Tushare enrichment: add PE/PB/ROE
+    if _ts_available() and top:
+        try:
+            codes = [s["代码"] for s in top]
+            fin_data = _ts_fin_batch(codes)
+            for s in top:
+                code = s["代码"]
+                if code in fin_data:
+                    fd = fin_data[code]
+                    if fd.get("pe"): s["市盈率"] = fd["pe"]
+                    if fd.get("pb"): s["市净率"] = fd["pb"]
+                    if fd.get("总市值(元)"): s["总市值"] = fd["总市值(元)"]
+        except Exception:
+            pass
+
     try:
         return jsonify({
             "data": top,
@@ -478,7 +514,7 @@ def api_factor():
                 "count": len(top),
                 "scanned": len(scored),
                 "source": source,
-                "note": "评分基于动量+活跃度，PE/PB/ROE 需 AKShare 完整数据"
+                "note": "评分基于动量+活跃度，PE/PB/ROE 数据源: " + source + ("+Tushare" if _ts_available() else "")
             }
         })
     except Exception as e:

@@ -143,7 +143,8 @@ def _get_ak():
     except ImportError:
         raise ImportError("akshare 未安装，请运行: pip install akshare")
 
-def _get_yf():
+
+def _get_yf():
     """懒加载 yfinance"""
     try:
         import yfinance as yf
@@ -152,6 +153,28 @@ def _get_ak():
         raise ImportError("yfinance 未安装，请运行: pip install yfinance")
 
 
+
+
+def _get_ts():
+    """Lazy-load tushare (requires TUSHARE_TOKEN env var).
+
+    Returns pro_api() if token is set and valid, None otherwise.
+    Callers should gracefully fall back to TDX/AKShare.
+    """
+    token = os.environ.get("TUSHARE_TOKEN", "").strip()
+    if not token:
+        return None
+    try:
+        import tushare as ts
+        ts.set_token(token)
+        pro = ts.pro_api()
+        # Quick validation
+        _ = pro.stock_basic(exchange='', list_status='L', fields='ts_code', limit=1)
+        return pro
+    except ImportError:
+        return None
+    except Exception:
+        return None
 def _lookup_name(code: str, market: str = "a") -> str:
     """多数据源名称查找：STOCK_MAPPING → HOT_STOCKS → yfinance info"""
     from mcp_finance.data import STOCK_MAPPING, HOT_STOCKS

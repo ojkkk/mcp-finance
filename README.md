@@ -1,7 +1,7 @@
 <h1 align="center">mcp-finance</h1>
 <p align="center">
   <strong>MCP Server for Global Financial Markets</strong><br>
-   29 tools · 3 markets · Millisecond-level quotes
+   29+ tools · 3 markets · Millisecond-level quotes
 </p>
 
 <p align="center">
@@ -13,15 +13,26 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/MCP-1.4+-purple" alt="MCP">
-  <img src="https://img.shields.io/badge/version-0.9.4-orange" alt="v0.9.0">
+  <img src="https://img.shields.io/badge/version-0.9.5-orange" alt="v0.9.0">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT">
 </p>
 
 ---
 
+## ⚠️ 免责声明
+
+**本工具仅供学习交流使用，所有数据仅供参考，不构成任何投资建议。**
+
+- 数据来源于第三方公开接口，**不作任何准确性、完整性、及时性的保证**
+- 回测结果不代表未来表现，**历史收益不预示未来收益**
+- 使用者应独立判断并承担投资风险，**作者不对任何投资损失负责**
+- **个人非商用无问题，企业商用请自行评估数据源的版权与合规风险**
+
+---
+
 ## 简介
 
-`mcp-finance` 是一个面向 AI 助手（Claude / Codex / Cursor 等 MCP 客户端）的金融数据服务，基于 **easy-tdx**（通达信毫秒级） + **AKShare** + **yfinance** 三数据源，覆盖 **A股、港股、美股、期货**四大市场，提供行情、K线、技术指标、选股、回测、分析等 29 个工具。
+`mcp-finance` 是一个面向 AI 助手（Claude / Codex / Cursor 等 MCP 客户端）的金融数据服务，基于 **easy-tdx**（通达信毫秒级） + **Tushare**（财务数据） + **AKShare** + **yfinance** 四数据源，覆盖 **A股、港股、美股、期货**四大市场，提供行情、K线、技术指标、选股、回测、分析等 29 个工具。
 
 ---
 
@@ -71,6 +82,33 @@ codex mcp add mcp-finance -- python -m mcp_finance.server
   }
 }
 ```
+
+### 可选：启用 Tushare 财务数据
+
+[Tushare](https://tushare.pro) 提供 PE/PB/ROE、季度财报等基本面数据。免费版需要注册并获取积分后才能使用。
+
+```bash
+# 注册 https://tushare.pro → 获取 token → 设置环境变量
+export TUSHARE_TOKEN=你的token   # Linux / Mac
+set TUSHARE_TOKEN=你的token       # Windows CMD
+$env:TUSHARE_TOKEN="你的token"    # Windows PowerShell
+```
+
+或在 MCP 客户端配置中传入：
+
+```json
+{
+  "mcpServers": {
+    "mcp-finance": {
+      "command": "python",
+      "args": ["-m", "mcp_finance.server"],
+      "env": { "TUSHARE_TOKEN": "你的token" }
+    }
+  }
+}
+```
+
+未设置或积分不足时，系统自动降级使用 AKShare / easy-tdx，不影响基础功能。
 
 ---
 
@@ -200,11 +238,12 @@ mcp-dashboard --port 3000
 
 ## 数据源
 
-| 数据源 | 说明 | 延迟 |
-|--------|------|------|
-| **easy-tdx** | 通达信 TCP 直连，主力行情/K线/资金流向 | 毫秒级 |
-| **AKShare** | 新浪/同花顺/东方财富，财务/板块/龙虎榜/研报 | 秒级 |
-| **yfinance** | Yahoo Finance，港股美股兜底 | 秒级 |
+| 数据源 | 说明 | 延迟 | 合规性 |
+|--------|------|------|--------|
+| **easy-tdx** | 通达信 TCP 直连，主力行情/K线/资金流向 | 毫秒级 | ⚠️ 协议逆向，仅供学习 |
+| **Tushare** | PE/PB/ROE/季度财报，Token 鉴权（可选，需积分） | 免费版延迟15分钟 | ✅ Token 鉴权 |
+| **AKShare** | 新浪/同花顺/东方财富，板块/龙虎榜/研报 | 秒级 | ⚠️ 网页爬虫，仅供学习 |
+| **yfinance** | Yahoo Finance，港股美股兜底 | 秒级 | ⚠️ 非官方接口 |
 
 ---
 
@@ -240,6 +279,28 @@ cd mcp-finance
 pip install -e ".[dev]"
 pytest tests/ -v
 ```
+
+---
+
+---
+
+## 局限与潜在风险
+
+### 数据源的天然短板
+
+- **无自有数据源**：全部依赖第三方公开接口与网页爬虫。TDX 依赖通达信公开服务器，AKShare 受站点改版影响极大，接口随时可能失效
+- **无合规授权**：数据无官方商业授权，个人学习非商用无问题，**企业商用存在明确版权风险**
+- **Tushare 需要积分**：免费注册后需通过贡献赚取积分才能调用 API，详见 [Tushare 积分规则](https://tushare.pro/document/1?doc_id=13)
+
+### 专业深度不足
+
+- **财务数据**：仅覆盖 PE/PB/ROE 等核心指标，颗粒度粗，无明细财报、一致预期、盈利预测等高阶基本面数据
+- **高频数据**：分钟 K 线仅支持 A 股，港美股无高频数据
+- **回测能力**：偏入门级别，仅 8 种预设策略，参数优化为简单网格扫描，不支持自定义复杂策略、滑点/手续费精细化模拟，无法满足专业量化需求
+
+### 免责重申
+
+> **本工具仅供学习交流，所有数据仅供参考。投资有风险，入市需谨慎。作者不对任何因使用本工具产生的投资损失承担责任。**
 
 ---
 

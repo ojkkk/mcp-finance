@@ -15,6 +15,11 @@ from mcp_finance.api import (
 from mcp_finance.indicators import compute_all_indicators
 from mcp_finance.data import STOCK_MAPPING
 from mcp_finance.logging_config import get_logger
+try:
+    from mcp_finance.tushare_source import is_available as _ts_available, get_financial_indicators_batch as _ts_fin_batch
+except ImportError:
+    _ts_available = lambda: False
+    _ts_fin_batch = lambda codes: {}
 
 _logger = get_logger(__name__)
 
