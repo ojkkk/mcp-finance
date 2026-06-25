@@ -1057,6 +1057,169 @@ def optimize_backtest(code: str, strategy: str = "ma_cross",
                      else "参数搜索全部完成") if tasks else ""}
 
 # ============================================================================
+
+# ============================================================================
+# Optuna 贝叶斯优化 — 智能参数搜索，替代网格扫描
+# ============================================================================
+
+def optimize_backtest_bayesian(
+    code: str, strategy: str = "ma_cross",
+    fast_min: int = 3, fast_max: int = 60,
+    slow_min: int = 10, slow_max: int = 200,
+    start_date: str | None = None, end_date: str | None = None,
+    metric: str = "sharpe",
+    n_trials: int = 50,
+) -> dict[str, Any]:
+    """Optuna TPE 贝叶斯参数优化 — 智能探索参数空间
+
+    相比网格扫描的优势:
+    - 不枚举所有组合，智能采样高潜力区域
+    - 50 次试验通常优于 200 组网格扫描
+    - 自动剪枝低质量参数区域 (MedianPruner)
+    - 输出参数重要性分析
+
+    Args:
+        code: 股票代码
+        strategy: 策略名称
+        fast_min/max: 快线参数范围
+        slow_min/max: 慢线参数范围
+        start_date/end_date: 回测区间
+        metric: 优化目标
+        n_trials: 试验次数 (默认 50，建议 30-100)
+    """
+    try:
+        import optuna
+        from optuna.samplers import TPESampler
+        from optuna.pruners import MedianPruner
+    except ImportError:
+        return {"error": "Optuna 未安装，请执行: pip install optuna"}
+
+    # 预取K线数据
+    try:
+        pre_fetched_klines = _get_kline_for_code(code, period="daily", adjust="qfq", limit=400)
+        if pre_fetched_klines and isinstance(pre_fetched_klines[0], dict) and "error" in pre_fetched_klines[0]:
+            return {"error": pre_fetched_klines[0]["error"]}
+        if not pre_fetched_klines:
+            return {"error": f"获取{code} K线数据失败"}
+    except Exception as e:
+        return {"error": f"获取K线数据异常: {e}"}
+
+    # 指标方向: 需要最大化的目标
+    metric_direction = "maximize"
+    if metric == "mdd":
+        metric_direction = "minimize"
+
+    best_result = None
+    trial_results: list[dict] = []
+
+    def objective(trial: optuna.Trial) -> float:
+        nonlocal best_result
+        # 采样参数
+        fast = trial.suggest_int("fast", fast_min, fast_max)
+        slow = trial.suggest_int("slow", slow_min, slow_max)
+
+        # 运行回测
+        try:
+            r = _run_single_backtest(
+                code=code, strategy=strategy,
+                fast_period=fast, slow_period=slow,
+                start_date=start_date, end_date=end_date,
+                benchmark_code=None, klines=pre_fetched_klines,
+                slippage_type="fixed_perc", slippage_value=0.001,
+            )
+        except Exception:
+            return float("-inf") if metric_direction == "maximize" else float("inf")
+
+        if "error" in r:
+            return float("-inf") if metric_direction == "maximize" else float("inf")
+
+        val = _extract_metric(r, metric)
+        item = {
+            "fast": fast, "slow": slow, "metric_value": val,
+            "总收益率(%)": r.get("总收益率(%)", 0),
+            "最大回撤(%)": r.get("最大回撤(%)", 0),
+            "夏普比率": r.get("夏普比率", 0),
+            "胜率(%)": r.get("胜率(%)", 0),
+            "交易次数": r.get("交易次数", 0),
+        }
+        trial_results.append(item)
+
+        # 追踪最优
+        if best_result is None or (
+            (metric_direction == "maximize" and val > best_result["metric_value"]) or
+            (metric_direction == "minimize" and val < best_result["metric_value"])
+        ):
+            best_result = item
+
+        # 中位数剪枝: 如果当前结果远差于历史中位数，提前停止
+        if len(trial_results) >= 10:
+            recent_vals = [x["metric_value"] for x in trial_results[-10:]]
+            median_val = sorted(recent_vals)[len(recent_vals) // 2]
+            if metric_direction == "maximize" and val < median_val * 0.5:
+                raise optuna.TrialPruned()
+            elif metric_direction == "minimize" and val > median_val * 2.0:
+                raise optuna.TrialPruned()
+
+        return val
+
+    # 创建 Study
+    sampler = TPESampler(seed=42)
+    pruner = MedianPruner(n_startup_trials=10, n_warmup_steps=5)
+    study = optuna.create_study(
+        direction=metric_direction,
+        sampler=sampler,
+        pruner=pruner,
+    )
+
+    # 运行优化
+    try:
+        study.optimize(objective, n_trials=n_trials, timeout=120)
+    except Exception as e:
+        # 即使优化过程出错，也返回已有结果
+        pass
+
+    if best_result is None:
+        return {"error": "贝叶斯优化失败: 所有试验均无有效结果"}
+
+    # 参数重要性
+    importance = {}
+    try:
+        imp = optuna.importance.get_param_importances(study)
+        importance = {k: round(float(v), 4) for k, v in imp.items()}
+    except Exception:
+        pass
+
+    # 收敛性分析
+    convergence = []
+    try:
+        vals = [t.value for t in study.trials if t.value is not None]
+        if vals:
+            best_so_far = vals[0]
+            for v in vals:
+                if metric_direction == "maximize":
+                    best_so_far = max(best_so_far, v)
+                else:
+                    best_so_far = min(best_so_far, v)
+                convergence.append(round(best_so_far, 4))
+    except Exception:
+        pass
+
+    return {
+        "优化方法": "Optuna TPE 贝叶斯优化",
+        "策略": _STRATEGY_LABELS.get(strategy, strategy),
+        "股票": _get_stock_name(code),
+        "优化目标": metric,
+        "试验次数": n_trials,
+        "完成试验": len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]),
+        "剪枝试验": len([t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]),
+        "最优参数": {"fast": best_result["fast"], "slow": best_result["slow"]},
+        "最优表现": {k: v for k, v in best_result.items() if k not in ("fast", "slow", "metric_value")},
+        "参数重要性": importance,
+        "收敛曲线": convergence,
+        "所有结果": sorted(trial_results, key=lambda x: x["metric_value"], reverse=metric_direction == "maximize")[:20],
+    }
+
+
 # MCP Tool Handlers
 # ============================================================================
 
@@ -1098,32 +1261,46 @@ def handle_backtest(arguments: dict[str, Any]) -> dict[str, Any]:
     return result
 
 def handle_optimize(arguments: dict[str, Any]) -> dict[str, Any]:
-    """参数优化handler"""
+    """参数优化handler — 支持网格扫描和贝叶斯优化两种模式"""
     code = arguments["code"]
     strategy = arguments.get("strategy", "ma_cross")
+    optimization_method = arguments.get("optimization_method", "grid")
     fast_min = arguments.get("fast_min", 5); fast_max = arguments.get("fast_max", 20)
     fast_step = arguments.get("fast_step", 5)
     slow_min = arguments.get("slow_min", 20); slow_max = arguments.get("slow_max", 60)
     slow_step = arguments.get("slow_step", 10)
     start_date = arguments.get("start_date"); end_date = arguments.get("end_date")
     metric = arguments.get("metric", "sharpe")
-    fast_range = list(range(fast_min, fast_max + 1, fast_step))
-    slow_range = list(range(slow_min, slow_max + 1, slow_step))
+    n_trials = arguments.get("n_trials", 50)
 
-    # 组合数硬上限，防止用户设置过大范围把 MCP 线程池拖死
-    MAX_COMBINATIONS = 200
-    total_combos = len(fast_range) * len(slow_range)
-    if total_combos > MAX_COMBINATIONS:
-        raise BacktestError(
-            f"参数组合数({total_combos})超过上限({MAX_COMBINATIONS})，"
-            f"请缩小范围或增大步长。当前 fast:{fast_min}-{fast_max}/{fast_step}, "
-            f"slow:{slow_min}-{slow_max}/{slow_step}"
+    if optimization_method == "bayesian":
+        # Optuna TPE 贝叶斯优化
+        result = optimize_backtest_bayesian(
+            code=code, strategy=strategy,
+            fast_min=fast_min, fast_max=fast_max,
+            slow_min=slow_min, slow_max=slow_max,
+            start_date=start_date, end_date=end_date,
+            metric=metric, n_trials=n_trials,
         )
+    else:
+        # 传统网格扫描
+        fast_range = list(range(fast_min, fast_max + 1, fast_step))
+        slow_range = list(range(slow_min, slow_max + 1, slow_step))
 
-    result = optimize_backtest(code=code, strategy=strategy, fast_range=fast_range, slow_range=slow_range,
-                               start_date=start_date, end_date=end_date, metric=metric,
-                               max_workers=arguments.get("max_workers"))
-    _blogger.info("参数优化完成: %s strategy=%s", code, strategy)
+        MAX_COMBINATIONS = 200
+        total_combos = len(fast_range) * len(slow_range)
+        if total_combos > MAX_COMBINATIONS:
+            raise BacktestError(
+                f"参数组合数({total_combos})超过上限({MAX_COMBINATIONS})，"
+                f"请缩小范围或增大步长。当前 fast:{fast_min}-{fast_max}/{fast_step}, "
+                f"slow:{slow_min}-{slow_max}/{slow_step}"
+            )
+
+        result = optimize_backtest(code=code, strategy=strategy, fast_range=fast_range, slow_range=slow_range,
+                                   start_date=start_date, end_date=end_date, metric=metric,
+                                   max_workers=arguments.get("max_workers"))
+
+    _blogger.info("参数优化完成: %s strategy=%s method=%s", code, strategy, optimization_method)
     return result
 
 

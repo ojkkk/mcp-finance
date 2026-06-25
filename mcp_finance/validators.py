@@ -167,6 +167,8 @@ class OptimizeParams(StockCodeModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     metric: str = Field(default="sharpe")
+    optimization_method: str = Field(default="grid", description="优化方法")
+    n_trials: int = Field(default=50, ge=10, le=200)
 
     @field_validator("metric")
     @classmethod

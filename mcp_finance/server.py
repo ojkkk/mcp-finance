@@ -312,7 +312,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="optimize_strategy",
-            description="参数优化：网格扫描策略参数组合，自动找出最优参数（基于 Backtrader 事件驱动引擎）。支持 A 股(6位代码)/港股(5位代码)/美股(字母代码)。注意：总组合数上限 200 组",
+            description="参数优化：支持网格扫描(grid)和贝叶斯优化(bayesian)两种模式。贝叶斯模式基于 Optuna TPE 采样器，50次试验通常优于200组网格扫描，自动剪枝+参数重要性分析。支持 A 股(6位代码)/港股(5位代码)/美股(字母代码)。网格模式组合数上限 200 组",
             inputSchema={
                 "type": "object",
                 "properties": {
