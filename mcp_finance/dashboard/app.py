@@ -146,66 +146,10 @@ def api_sectors():
 
 @app.route("/api/market/north_flow")
 def api_north_flow():
-    """North flow - try multiple sources"""
+    """North flow - TDX first (~100ms), AKShare fallback (~5s)"""
     days = min(int(request.args.get("days", 10)), 30)
 
-    # Try AKShare handler first
-    try:
-        result = handle_north_flow({"days": days})
-        if isinstance(result, dict) and not result.get("error"):
-            data = result.get("data", result.get("北向资金", result.get("数据", [])))
-            if data and len(data) > 0:
-                return jsonify({"data": data, "error": None, "source": result.get("数据源", "AKShare")})
-    except Exception as e:
-        _log.warning(f"North flow AKShare: {e}")
-
-    # Fallback: try AKShare directly with different API
-    try:
-        from mcp_finance.api import _get_ak
-        ak = _get_ak()
-        for sym in ["沪股通", "深股通", "港股通(沪)", "港股通(深)"]:
-            try:
-                df = ak.stock_hsgt_hist_em(symbol=sym)
-                if df is not None and not df.empty:
-                    df = df.tail(days)
-                    data = []
-                    for _, row in df.iterrows():
-                        data.append({
-                            "日期": str(row.get("日期", ""))[:10],
-                            "渠道": sym or "沪深港通",
-                            "净买额": _sf(row.get("当日成交净买额")),
-                            "买入额": _sf(row.get("买入成交额")),
-                            "卖出额": _sf(row.get("卖出成交额")),
-                        })
-                    if data:
-                        return jsonify({"data": data, "error": None, "source": f"AKShare-{sym}"})
-            except Exception:
-                continue
-    except Exception as e:
-        _log.warning(f"North flow AKShare direct: {e}")
-
-    # Fallback: try north flow without symbol
-    try:
-        from mcp_finance.api import _get_ak
-        ak = _get_ak()
-        df = ak.stock_hsgt_hist_em()
-        if df is not None and not df.empty:
-            df = df.tail(days)
-            data = []
-            for _, row in df.iterrows():
-                data.append({
-                    "日期": str(row.get("日期", ""))[:10],
-                    "渠道": "沪深港通",
-                    "净买额": _sf(row.get("当日成交净买额")),
-                    "买入额": _sf(row.get("买入成交额")),
-                    "卖出额": _sf(row.get("卖出成交额")),
-                })
-            if data:
-                return jsonify({"data": data, "error": None, "source": "AKShare"})
-    except Exception as e:
-        _log.warning(f"North flow AKShare fallback: {e}")
-
-    # Final fallback: try easy-tdx north flow if available
+    # 1. Fast path: TDX (~100ms)
     try:
         from mcp_finance.api import _get_tdx
         tdx = _get_tdx()
@@ -219,7 +163,17 @@ def api_north_flow():
     except Exception as e:
         _log.warning(f"North flow TDX: {e}")
 
-    return jsonify({"data": [], "error": "暂无北向资金数据，请稍后重试"})
+    # 2. Fallback: AKShare handler (~5s, may fail outside trading hours)
+    try:
+        result = handle_north_flow({"days": days})
+        if isinstance(result, dict) and not result.get("error"):
+            data = result.get("data", result.get("北向资金", result.get("数据", [])))
+            if data and len(data) > 0:
+                return jsonify({"data": data, "error": None, "source": result.get("数据源", "AKShare")})
+    except Exception as e:
+        _log.warning(f"North flow AKShare: {e}")
+
+    return jsonify({"data": [], "error": "暂无北向资金数据"})
 
 
 def _df_to_records_simple(df):
@@ -452,31 +406,9 @@ def api_screener():
             except Exception:
                 pass
 
-            # Try AKShare snapshot for PE/PB/总市值 (with 8s timeout, don't block the response)
-            try:
-                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-                def _fetch_snap():
-                    from mcp_finance.api import get_all_a_stocks_snapshot
-                    return get_all_a_stocks_snapshot()
-                with ThreadPoolExecutor(max_workers=1) as pool:
-                    snap = pool.submit(_fetch_snap).result(timeout=8)
-                if snap:
-                    snap_map = {}
-                    for s in snap:
-                        sc = str(s.get("代码", "")).zfill(6)
-                        snap_map[sc] = s
-                    for it in normalized:
-                        code = it["代码"]
-                        if code in snap_map:
-                            s = snap_map[code]
-                            if not it.get("市盈率"):
-                                it["市盈率"] = _sf(s.get("市盈率"))
-                            if not it.get("市净率"):
-                                it["市净率"] = _sf(s.get("市净率"))
-                            if not it.get("总市值"):
-                                it["总市值"] = _sf(s.get("总市值"))
-            except Exception:
-                pass
+            # PE/PB/总市值: TDX fast path doesn't have these; they'll be populated
+            # when the AKShare fallback is triggered (user sets fundamental filters).
+            # This keeps the fast path actually fast.
 
         # Tushare enrichment (only if explicitly enabled)
         if _ts_available() and normalized:
