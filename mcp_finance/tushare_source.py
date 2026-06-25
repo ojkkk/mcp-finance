@@ -44,9 +44,8 @@ def get_ts():
         ts.set_token(token)
         _ts_client = ts.pro_api()
         # 快速连接测试
-        _ts_client.query("stock_basic", exchange="", list_status="L", fields="ts_code", limit=1)
         _ts_available = True
-        _log.info("Tushare 连接成功")
+        _log.info("Tushare 客户端初始化成功")
         return _ts_client
     except Exception as e:
         _log.warning(f"Tushare 连接失败: {e}")
@@ -364,7 +363,8 @@ def check_data_source() -> dict:
         }
     
     try:
-        df = ts.stock_basic(exchange="SSE", list_status="L", fields="ts_code", limit=1)
+        # 使用 trade_cal 做轻量连接测试（不限频）
+        df = ts.trade_cal(exchange="SSE", start_date="20250101", end_date="20250101")
         return {
             "available": True,
             "test": "ok",

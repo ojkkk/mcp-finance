@@ -2,6 +2,13 @@
 from __future__ import annotations
 from typing import Any
 import json, os, math, time, traceback, sys
+# ── 自动加载 .env ──
+try:
+    from dotenv import load_dotenv
+    _env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env")
+    load_dotenv(_env_file)
+except ImportError:
+    pass  # python-dotenv 未安装，用户需手动设置环境变量
 from flask import Flask, jsonify, request, render_template
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -548,3 +555,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

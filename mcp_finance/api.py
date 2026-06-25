@@ -167,10 +167,7 @@ def _get_ts():
     try:
         import tushare as ts
         ts.set_token(token)
-        pro = ts.pro_api()
-        # Quick validation
-        _ = pro.stock_basic(exchange='', list_status='L', fields='ts_code', limit=1)
-        return pro
+        return ts.pro_api()
     except ImportError:
         return None
     except Exception:
@@ -483,8 +480,6 @@ def get_realtime_quote_a(code):
         }
 
     return {"error": f"未找到股票 {code}，请检查代码是否正确"}
-
-
 def _get_realtime_quote_overseas(code: str, market: str) -> dict:
     """港股/美股实时行情统一函数"""
     market_label = "港股" if market == "hk" else "美股"
@@ -937,26 +932,27 @@ def get_market_indices(market="a"):
 # ================================================================
 
 def get_sector_ranking(market="a", sector_type="industry", top_n=10):
-    """获取板块涨幅排行（同花顺优先，概念板块东方财富降级）"""
+    """获取板块涨幅排行（同花顺 summary 数据源，带涨跌幅/净流入）"""
     ak = _get_ak()
     if market == "a":
         try:
             if sector_type == "industry":
-                df = _call_with_net_timeout(lambda: ak.stock_board_industry_name_ths())
+                df = _call_with_net_timeout(lambda: ak.stock_board_industry_summary_ths())
             elif sector_type == "concept":
-                df = _call_with_net_timeout(lambda: ak.stock_board_concept_name_ths())
+                # 概念板块: 先用东方财富，不行降级到同花顺概念名称列表
+                df = _call_with_net_timeout(lambda: ak.stock_board_concept_name_em())
                 if df is None or df.empty:
-                    # 降级: 东方财富概念板块
-                    df = _call_with_net_timeout(lambda: ak.stock_board_concept_name_em())
+                    df = _call_with_net_timeout(lambda: ak.stock_board_concept_name_ths())
+            elif sector_type == "region":
+                df = _call_with_net_timeout(lambda: ak.stock_board_industry_summary_ths())
             else:
-                df = _call_with_net_timeout(lambda: ak.stock_board_industry_name_ths())
+                df = _call_with_net_timeout(lambda: ak.stock_board_industry_summary_ths())
             if df is None or df.empty:
                 return []
-            # 同花顺返回的列名与东方财富不同，适配一下
             result = _df_to_records(df.head(top_n))
             # 字段名归一化映射
             _SECTOR_FIELD_MAP = {
-                "板块名称": "名称", "概念名称": "名称", "name": "名称",
+                "板块": "名称", "板块名称": "名称", "概念名称": "名称", "name": "名称",
                 "板块代码": "代码", "code": "代码",
                 "最新价": "最新价", "current_price": "最新价",
                 "涨跌幅": "涨跌幅", "涨幅": "涨跌幅", "pct_change": "涨跌幅",
@@ -966,8 +962,11 @@ def get_sector_ranking(market="a", sector_type="industry", top_n=10):
                 "市盈率": "市盈率", "PE": "市盈率", "pe_ratio": "市盈率",
                 "上涨家数": "上涨家数", "up_num": "上涨家数",
                 "下跌家数": "下跌家数", "down_num": "下跌家数",
-                "成交量": "成交量", "volume": "成交量",
-                "成交额": "成交额", "amount": "成交额",
+                "总成交量": "总成交量", "成交量": "成交量", "volume": "成交量",
+                "总成交额": "总成交额", "成交额": "成交额", "amount": "成交额",
+                "净流入": "净流入", "net_flow": "净流入",
+                "均价": "均价", "avg_price": "均价",
+                "领涨股": "领涨股", "leader": "领涨股",
                 "排名": "排名", "rank": "排名",
                 "序号": "排名",
             }

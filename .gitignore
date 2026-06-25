@@ -29,3 +29,10 @@ env/
 **/.codegraph/
 **/.kline_cache/
 **/.financial_cache/
+
+# 敏感配置 — 绝对不能提交
+.env
+.env.local
+.env.*.local
+*.token
+*_token.txt

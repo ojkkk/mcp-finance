@@ -33,6 +33,7 @@ dependencies = [
     "backtrader>=1.9",
     "flask>=3.0",
     "tushare>=1.4",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -79,4 +80,5 @@ select = ["E", "F", "W", "I", "N", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+
 
