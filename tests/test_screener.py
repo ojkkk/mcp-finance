@@ -150,3 +150,75 @@ class TestHandlerFunctions:
         from mcp_finance.errors import NoDataError
         with pytest.raises(NoDataError):
             handle_stock_screener({"min_gain": 999.0})
+
+class TestScreenerRegression:
+    """回归测试：覆盖审查中发现的边界 Bug"""
+
+    @patch("mcp_finance.screener._fetch_all_a_stocks")
+    def test_zero_gain_not_filtered_by_min_gain(self, mock_fetch):
+        """Bug-1 回归: min_gain=0 不应被视为"未设置"而跳过过滤"""
+        mock_fetch.return_value = [
+            {"f12": "000001", "f14": "测试A", "f2": "10.00", "f3": "5.00",
+             "f8": "1.0", "f9": "20", "f10": "1.0", "f20": "50000000000", "f23": "2.0"},
+            {"f12": "000002", "f14": "测试B", "f2": "10.00", "f3": "-3.00",
+             "f8": "1.0", "f9": "20", "f10": "1.0", "f20": "50000000000", "f23": "2.0"},
+            {"f12": "000003", "f14": "测试C", "f2": "10.00", "f3": "0.00",
+             "f8": "1.0", "f9": "20", "f10": "1.0", "f20": "50000000000", "f23": "2.0"},
+        ]
+        # min_gain=0 应该排除下跌股（gain<0）
+        result = screen_stocks(min_gain=0)
+        for stock in result["matched"]:
+            assert stock["涨跌幅"] is not None
+            assert stock["涨跌幅"] >= 0, f"min_gain=0 但保留了跌幅股 {stock['涨跌幅']}"
+
+    @patch("mcp_finance.screener._fetch_all_a_stocks")
+    def test_zero_gain_preserved_in_result(self, mock_fetch):
+        """Bug-3 回归: 涨跌幅=0 不应被 or 逻辑吞掉"""
+        mock_fetch.return_value = [
+            {"f12": "000001", "f14": "零涨幅", "f2": "10.00", "f3": "0.00",
+             "f8": "0.5", "f9": "15", "f10": "1.0", "f20": "100000000000", "f23": "3.0"},
+        ]
+        result = screen_stocks()
+        assert len(result["matched"]) == 1
+        assert result["matched"][0]["涨跌幅"] == 0.0, f"涨跌幅=0 应保留，实际: {result['matched'][0]['涨跌幅']}"
+
+    @patch("mcp_finance.screener._fetch_all_a_stocks")
+    def test_max_gain_and_min_gain_combined(self, mock_fetch):
+        """组合过滤: min_gain + max_gain 同时设置"""
+        mock_fetch.return_value = [
+            {"f12": "000001", "f14": "A", "f2": "10", "f3": "8.0", "f8": "1", "f9": "20", "f10": "1", "f20": "5e10", "f23": "2"},
+            {"f12": "000002", "f14": "B", "f2": "10", "f3": "3.0", "f8": "1", "f9": "20", "f10": "1", "f20": "5e10", "f23": "2"},
+            {"f12": "000003", "f14": "C", "f2": "10", "f3": "1.0", "f8": "1", "f9": "20", "f10": "1", "f20": "5e10", "f23": "2"},
+        ]
+        result = screen_stocks(min_gain=2.0, max_gain=5.0)
+        gains = [s["涨跌幅"] for s in result["matched"]]
+        for g in gains:
+            assert 2.0 <= g <= 5.0, f"gain {g} 不在 [2,5] 区间"
+
+    @patch("mcp_finance.screener._fetch_all_a_stocks")
+    def test_min_pb_max_pb_combined(self, mock_fetch):
+        """组合过滤: min_pb + max_pb 同时设置"""
+        mock_fetch.return_value = [
+            {"f12": "000001", "f14": "低PB", "f2": "10", "f3": "1.0", "f8": "1", "f9": "20", "f10": "1", "f20": "5e10", "f23": "0.5"},
+            {"f12": "000002", "f14": "中PB", "f2": "10", "f3": "1.0", "f8": "1", "f9": "20", "f10": "1", "f20": "5e10", "f23": "3.0"},
+            {"f12": "000003", "f14": "高PB", "f2": "10", "f3": "1.0", "f8": "1", "f9": "20", "f10": "1", "f20": "5e10", "f23": "10.0"},
+        ]
+        result = screen_stocks(min_pb=1.0, max_pb=5.0)
+        for stock in result["matched"]:
+            assert stock["市净率"] is not None
+            assert 1.0 <= stock["市净率"] <= 5.0, f"PB {stock['市净率']} 不在 [1,5]"
+
+    @patch("mcp_finance.screener._fetch_all_a_stocks")
+    def test_empty_string_field_not_crashing(self, mock_fetch):
+        """空字符串字段不崩溃"""
+        mock_fetch.return_value = [
+            {"f12": "000001", "f14": "测试", "f2": "", "f3": "-", "f8": "", "f9": "",
+             "f10": None, "f20": None, "f23": "N/A", "f37": None, "f45": None, "f62": None,
+             "f7": None, "f17": None, "f15": None, "f16": None, "f18": None},
+        ]
+        result = screen_stocks()
+        assert result["total_scanned"] == 1
+        assert result["count"] == 1  # No filters, should pass
+        stock = result["matched"][0]
+        assert stock["涨跌幅"] is None  # "-" → None (processed by _f)
+        assert stock["最新价"] == ""  # 透传原始值，不经过 _f

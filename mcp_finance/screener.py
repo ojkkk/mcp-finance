@@ -134,6 +134,7 @@ def screen_stocks(
             continue
         if max_pe is not None and pe is not None and pe > max_pe:
             continue
+        # 注意: f20(总市值)假设单位为元，min_market_cap 单位为亿(1e8)
         if min_market_cap is not None and market_cap is not None and market_cap < min_market_cap * 1e8:
             continue
         if min_pb is not None and pb is not None and pb < min_pb:
@@ -155,7 +156,7 @@ def screen_stocks(
             candidate_codes = [item["f12"] for item in candidates if item.get("f12")]
 
             # 财务指标: 批量并行获取（ROE/毛利率/净利率/营收增长率）
-            if need_slow and candidate_codes:
+            if candidate_codes:
                 fin_results = preload_financials(candidate_codes, max_workers=4)
                 for item in candidates:
                     code = item.get("f12", "")

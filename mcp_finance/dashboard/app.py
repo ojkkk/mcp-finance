@@ -53,11 +53,18 @@ app.json.ensure_ascii = False
 
 # ═══════════════ Helpers ═══════════════
 def _sf(v):
+    """安全转 float，NaN/Inf 返回 None，保留 4 位小数。
+    注意: 与 api.py 的 _safe_float (保留 2 位) 精度不同，Dashboard 用更高精度。"""
     try:
         if v is None: return None
         f = float(v)
         return None if math.isnan(f) or math.isinf(f) else round(f, 4)
     except: return None
+
+def _nv(a, b):
+    """None-safe fallback: returns a if a is not None, else b.
+    Unlike `a or b`, this preserves 0 and other falsy values."""
+    return a if a is not None else b
 
 def _safe_call(handler, args):
     try:
@@ -344,46 +351,54 @@ def api_screener():
                     pass
             if all_dfs:
                 df = pd.concat(all_dfs, ignore_index=True)
-                matched = []
-                for _, row in df.iterrows():
-                    code = str(row.get("code", "")).zfill(6)
-                    name = str(row.get("name", ""))
-                    close = _sf(row.get("close"))
-                    pre = _sf(row.get("pre_close"))
-                    pct = None
-                    if close and pre and pre != 0:
-                        pct = round((close - pre) / pre * 100, 2)
-                    turnover = _sf(row.get("turnover"))
-                    amount = _sf(row.get("amount"))
-                    vol_ratio = _sf(row.get("vol_ratio"))
-                    if args.get("min_gain") and (pct is None or pct < args["min_gain"]):
-                        continue
-                    if args.get("max_gain") and pct and pct > args["max_gain"]:
-                        continue
-                    if args.get("min_turnover") and (turnover is None or turnover < args["min_turnover"]):
-                        continue
-                    if args.get("min_volume_ratio") and (vol_ratio is None or vol_ratio < args["min_volume_ratio"]):
-                        continue
-                    if args.get("min_market_cap") and (amount is None or amount < args["min_market_cap"] * 1e8):
-                        continue
-                    if args.get("max_pe") or args.get("max_pb") or args.get("min_roe") or args.get("min_pb") or args.get("min_gross_margin") or args.get("min_net_margin") or args.get("min_revenue_growth"):
-                        continue  # TDX lacks fundamental data, skip filter
-                    matched.append({
-                        "代码": code,
-                        "名称": name,
-                        "最新价": close,
-                        "涨跌幅(%)": pct,
-                        "换手率(%)": turnover,
-                        "市盈率(动)": None,
-                        "市净率(PB)": None,
-                        "量比": vol_ratio,
-                        "总市值(元)": None,
-                        "振幅(%)": None,
-                        "ROE(%)": None,
-                    })
-                    if len(matched) >= args.get("top_n", 30):
-                        break
-                raw = {"matched": matched, "count": len(matched), "total_scanned": len(df), "source": "TDX"}
+                # Check if unsupported filters require full AKShare fallback
+                _tdx_unsupported = any(
+                    args.get(k) is not None
+                    for k in ("max_pe", "max_pb", "min_roe", "min_pb",
+                              "min_gross_margin", "min_net_margin",
+                              "min_revenue_growth", "min_market_cap")
+                )
+                if not _tdx_unsupported:
+                    matched = []
+                    _tdx_scanned = 0
+                    for _, row in df.iterrows():
+                        code = str(row.get("code", "")).zfill(6)
+                        name = str(row.get("name", ""))
+                        if not code or not name:
+                            continue
+                        _tdx_scanned += 1
+                        close = _sf(row.get("close"))
+                        pre = _sf(row.get("pre_close"))
+                        pct = None
+                        if close and pre and pre != 0:
+                            pct = round((close - pre) / pre * 100, 2)
+                        turnover = _sf(row.get("turnover"))
+                        vol_ratio = _sf(row.get("vol_ratio"))
+                        if args.get("min_gain") is not None and (pct is None or pct < args["min_gain"]):
+                            continue
+                        if args.get("max_gain") is not None and pct is not None and pct > args["max_gain"]:
+                            continue
+                        if args.get("min_turnover") is not None and (turnover is None or turnover < args["min_turnover"]):
+                            continue
+                        if args.get("min_volume_ratio") is not None and (vol_ratio is None or vol_ratio < args["min_volume_ratio"]):
+                            continue
+                        matched.append({
+                            "代码": code,
+                            "名称": name,
+                            "最新价": close,
+                            "涨跌幅(%)": pct,
+                            "换手率(%)": turnover,
+                            "市盈率(动)": None,
+                            "市净率(PB)": None,
+                            "量比": vol_ratio,
+                            "总市值(元)": None,
+                            "振幅(%)": None,
+                            "ROE(%)": None,
+                        })
+                    # Sort by gain desc (None last), then limit to top_n
+                    # Note: avoid `or` which would treat 0% gain as -9999
+                    matched.sort(key=lambda x: (x["涨跌幅(%)"] is not None, x["涨跌幅(%)"] if x["涨跌幅(%)"] is not None else -9999), reverse=True)
+                    raw = {"matched": matched[:int(args.get("top_n", 30))], "count": len(matched), "total_scanned": _tdx_scanned, "source": "TDX"}
     except Exception as e:
         _log.warning(f"TDX screener: {e}")
 
@@ -403,14 +418,14 @@ def api_screener():
                 "代码": it.get("代码", ""),
                 "名称": it.get("名称", ""),
                 "最新价": _sf(it.get("最新价")),
-                "涨跌幅": _sf(it.get("涨跌幅") or it.get("涨跌幅(%)")),
-                "换手率": _sf(it.get("换手率") or it.get("换手率(%)")),
-                "市盈率": _sf(it.get("市盈率") or it.get("市盈率(动)")),
-                "市净率": _sf(it.get("市净率") or it.get("市净率(PB)")),
+                "涨跌幅": _sf(_nv(it.get("涨跌幅"), it.get("涨跌幅(%)"))),
+                "换手率": _sf(_nv(it.get("换手率"), it.get("换手率(%)"))),
+                "市盈率": _sf(_nv(it.get("市盈率"), it.get("市盈率(动)"))),
+                "市净率": _sf(_nv(it.get("市净率"), it.get("市净率(PB)"))),
                 "量比": _sf(it.get("量比")),
-                "总市值": _sf(it.get("总市值") or it.get("总市值(元)")),
-                "振幅": _sf(it.get("振幅") or it.get("振幅(%)")),
-                "ROE": _sf(it.get("ROE") or it.get("ROE(%)")),
+                "总市值": _sf(_nv(it.get("总市值"), it.get("总市值(元)"))),
+                "振幅": _sf(_nv(it.get("振幅"), it.get("振幅(%)"))),
+                "ROE": _sf(_nv(it.get("ROE"), it.get("ROE(%)"))),
                 "毛利率": _sf(it.get("毛利率")),
                 "净利率": _sf(it.get("净利率")),
                 "营收增长率": _sf(it.get("营收增长率")),
@@ -534,6 +549,7 @@ def api_factor():
                         "涨跌幅": pct_chg,
                         "成交额": _sf(row.get("amount")),
                         "成交量": _sf(row.get("vol")),
+                        "总市值": None,
                     })
                 source = "TDX"
     except Exception as e:
@@ -566,8 +582,11 @@ def api_factor():
             price = _sf(s.get("最新价", s.get("price"))) or 0
             amount = _sf(s.get("成交额", s.get("amount"))) or 0
             volume = _sf(s.get("成交量", s.get("volume"))) or 0
+            market_cap = _sf(s.get("总市值", s.get("market_cap")))
 
-            if amount < min_mc * 1e7:
+            # 市值过滤：有数据时用总市值；无数据时用成交额做粗略代理
+            _mc = market_cap if market_cap is not None else amount
+            if _mc < min_mc * 1e8:
                 continue
 
             m_score = min(50, max(0, 30 + gain * 2.5))

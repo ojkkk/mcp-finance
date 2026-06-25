@@ -38,6 +38,7 @@
 <div><div class="fl">最低换手%</div><input id="min_turnover" class="input" type="number" step="0.1" placeholder="不限"></div>
 <div><div class="fl">最低量比</div><input id="min_volume_ratio" class="input" type="number" step="0.1" placeholder="不限"></div>
 <div><div class="fl">最高市盈率</div><input id="max_pe" class="input" type="number" step="0.1" placeholder="不限"></div>
+<div><div class="fl">最低市净率</div><input id="min_pb" class="input" type="number" step="0.1" placeholder="不限"></div>
 <div><div class="fl">最高市净率</div><input id="max_pb" class="input" type="number" step="0.1" placeholder="不限"></div>
 <div><div class="fl">最低市值(亿)</div><input id="min_market_cap" class="input" type="number" step="1" placeholder="不限"></div>
 <div><div class="fl">最低ROE%</div><input id="min_roe" class="input" type="number" step="0.1" placeholder="不限"></div>
@@ -86,7 +87,7 @@ document.getElementById("factor-tbody").innerHTML=items.map(function(s){return'<
 
 async function runScreener(){
 var p={top_n:parseInt(document.getElementById("top_n").value)||30};
-var fieldIds=["min_gain","max_gain","min_turnover","min_volume_ratio","max_pe","max_pb","min_market_cap","min_roe","min_gross_margin","min_net_margin","min_revenue_growth"];fieldIds.forEach(function(id){var el=document.getElementById(id);if(!el)return;var v=el.value;if(v!==""&&v!==null)p[id]=parseFloat(v)});
+var fieldIds=["min_gain","max_gain","min_turnover","min_volume_ratio","max_pe","min_pb","max_pb","min_market_cap","min_roe","min_gross_margin","min_net_margin","min_revenue_growth"];fieldIds.forEach(function(id){var el=document.getElementById(id);if(!el)return;var v=el.value;if(v!==""&&v!==null)p[id]=parseFloat(v)});
 var ld=document.getElementById("screen-loading"),er=document.getElementById("screen-error"),rd=document.getElementById("screen-result");
 rd.style.display="none";er.style.display="none";ld.style.display="block";
 try{var r=await fetch("/api/screener",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});var d=await r.json();ld.style.display="none";
