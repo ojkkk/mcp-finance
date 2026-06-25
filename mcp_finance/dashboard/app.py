@@ -146,34 +146,51 @@ def api_sectors():
 
 @app.route("/api/market/north_flow")
 def api_north_flow():
-    """North flow - TDX first (~100ms), AKShare fallback (~5s)"""
+    """North flow - AKShare with 8s timeout, graceful empty on failure"""
     days = min(int(request.args.get("days", 10)), 30)
 
-    # 1. Fast path: TDX (~100ms)
+    # Try AKShare with timeout (TDX doesn't support north flow)
     try:
-        from mcp_finance.api import _get_tdx
-        tdx = _get_tdx()
-        if tdx:
-            df = tdx.get_north_flow()
-            if df is not None and not df.empty:
-                df = df.tail(days)
-                data = _df_to_records_simple(df)
-                if data:
-                    return jsonify({"data": data, "error": None, "source": "TDX"})
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+        def _fetch():
+            # Try AKShare handler first
+            result = handle_north_flow({"days": days})
+            if isinstance(result, dict) and not result.get("error"):
+                data = result.get("data", result.get("北向资金", result.get("数据", [])))
+                if data and len(data) > 0:
+                    return ("ok", data, result.get("数据源", "AKShare"))
+            # Try direct AKShare
+            from mcp_finance.api import _get_ak
+            ak = _get_ak()
+            for sym in ["沪股通", "深股通"]:
+                try:
+                    df = ak.stock_hsgt_hist_em(symbol=sym)
+                    if df is not None and not df.empty:
+                        df = df.tail(days)
+                        data = []
+                        for _, row in df.iterrows():
+                            data.append({
+                                "日期": str(row.get("日期", ""))[:10],
+                                "渠道": sym,
+                                "净买额": _sf(row.get("当日成交净买额")),
+                                "买入额": _sf(row.get("买入成交额")),
+                                "卖出额": _sf(row.get("卖出成交额")),
+                            })
+                        if data:
+                            return ("ok", data, f"AKShare-{sym}")
+                except Exception:
+                    continue
+            return ("empty", [], "")
+        
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            status, data, source = pool.submit(_fetch).result(timeout=8)
+            return jsonify({"data": data, "error": None if data else "暂无数据", "source": source})
+    except FuturesTimeoutError:
+        _log.warning("North flow: AKShare timeout after 8s")
     except Exception as e:
-        _log.warning(f"North flow TDX: {e}")
+        _log.warning(f"North flow: {e}")
 
-    # 2. Fallback: AKShare handler (~5s, may fail outside trading hours)
-    try:
-        result = handle_north_flow({"days": days})
-        if isinstance(result, dict) and not result.get("error"):
-            data = result.get("data", result.get("北向资金", result.get("数据", [])))
-            if data and len(data) > 0:
-                return jsonify({"data": data, "error": None, "source": result.get("数据源", "AKShare")})
-    except Exception as e:
-        _log.warning(f"North flow AKShare: {e}")
-
-    return jsonify({"data": [], "error": "暂无北向资金数据"})
+    return jsonify({"data": [], "error": "暂无北向资金数据（非交易时段或网络异常）"})
 
 
 def _df_to_records_simple(df):
