@@ -69,6 +69,9 @@ exclude = [
     "mcp_finance/__pycache__/**",
 ]
 
+[tool.hatch.version]
+path = "mcp_finance/__init__.py"
+
 [project.scripts]
 mcp-markets = "mcp_finance.server:cli"
 mcp-dashboard = "mcp_finance.dashboard.app:main"
