@@ -1,7 +1,7 @@
 <div align="center">
 
 <!-- 🌊 顶部动态波浪 + 大标题（服务端渲染，GitHub 兼容） -->
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,20:0EA5E9,50:8B5CF6,80:EC4899,100:4F46E5&height=200&section=header&text=mcp-markets&fontSize=52&fontColor=ffffff&fontAlignY=38&desc=%E5%85%A8%E5%B8%82%E5%9C%BA%E9%87%91%E8%9E%8D%E6%95%B0%E6%8D%AE%20MCP%20Server&descSize=18&descColor=c4b5fd&descAlignY=68" width="100%">
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,20:0EA5E9,50:8B5CF6,80:EC4899,100:4F46E5&height=200&section=header&text=mcp-finance&fontSize=52&fontColor=ffffff&fontAlignY=38&desc=%E5%85%A8%E5%B8%82%E5%9C%BA%E9%87%91%E8%9E%8D%E6%95%B0%E6%8D%AE%20MCP%20Server&descSize=18&descColor=c4b5fd&descAlignY=68" width="100%">
 
 <!-- 📝 动态打字副标题：轮播核心卖点 -->
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&pause=900&color=6366F1&center=true&vCenter=true&width=620&lines=AI+%E5%8A%A9%E6%89%8B%E7%9C%8B%E6%87%82+A%E8%82%A1+%C2%B7+%E6%B8%AF%E8%82%A1+%C2%B7+%E7%BE%8E%E8%82%A1+%C2%B7+%E6%9C%9F%E8%B4%A7;31+%E4%B8%AA+MCP+%E5%B7%A5%E5%85%B7+%C2%B7+4+%E5%A4%A7%E6%95%B0%E6%8D%AE%E6%BA%90;9+%E7%A7%8D%E7%AD%96%E7%95%A5%E5%9B%9E%E6%B5%8B+%C2%B7+%E8%B4%9D%E5%8F%B6%E6%96%AF%E4%BC%98%E5%8C%96+%C2%B7+%E9%98%B2%E8%BF%87%E6%8B%9F;%E6%AF%AB%E7%A7%92%E7%BA%A7%E8%A1%8C%E6%83%85+%C2%B7+%E4%BA%A4%E4%BA%92%E5%BC%8FK%E7%BA%BF+%C2%B7+Web+%E7%9C%8B%E6%9D%BF" alt="tagline">
@@ -269,7 +269,7 @@ ruff check mcp_finance/
 
 ## 📄 License
 
-MIT © [mcp-markets](https://github.com/ojkkk/mcp-finance)
+MIT © [mcp-finance](https://github.com/ojkkk/mcp-finance)
 
 <!-- 🌊 底部波浪 -->
 <div align="center">

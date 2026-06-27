@@ -1,7 +1,7 @@
 <div align="center">
 
 <!-- 🌊 Top dynamic wave + large title (server-side rendered, GitHub compatible) -->
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,20:0EA5E9,50:8B5CF6,80:EC4899,100:4F46E5&height=200&section=header&text=mcp-markets&fontSize=52&fontColor=ffffff&fontAlignY=38&desc=Global%20Financial%20Market%20MCP%20Server&descSize=18&descColor=c4b5fd&descAlignY=68" width="100%">
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,20:0EA5E9,50:8B5CF6,80:EC4899,100:4F46E5&height=200&section=header&text=mcp-finance&fontSize=52&fontColor=ffffff&fontAlignY=38&desc=Global%20Financial%20Market%20MCP%20Server&descSize=18&descColor=c4b5fd&descAlignY=68" width="100%">
 
 <!-- 📝 Animated typing subtitle: rotating key features -->
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&pause=900&color=6366F1&center=true&vCenter=true&width=620&lines=AI+Eyes+on+A-Shares+%C2%B7+HK+%C2%B7+US+%C2%B7+Futures;31+MCP+Tools+%C2%B7+4+Data+Sources;9+Backtest+Strategies+%C2%B7+Bayesian+Opt+%C2%B7+Anti-Overfit;Millisecond+Quotes+%C2%B7+Interactive+K-line+%C2%B7+Web+Dashboard" alt="typing">
@@ -268,7 +268,7 @@ ruff check mcp_finance/
 
 ## 📄 License
 
-MIT © [mcp-markets](https://github.com/ojkkk/mcp-finance)
+MIT © [mcp-finance](https://github.com/ojkkk/mcp-finance)
 
 <!-- 🌊 Bottom wave -->
 <div align="center">
