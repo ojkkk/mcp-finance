@@ -673,12 +673,25 @@ def api_monte_carlo():
 
 
 # ═══════════════ Entry ═══════════════
+# ═══════════════ Entry ═══════════════
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    print(f"\n  mcp-finance Dashboard v6 -> http://localhost:{port}\n")
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    import argparse
+    parser = argparse.ArgumentParser(
+        prog="mcp-dashboard",
+        description="mcp-finance Web Dashboard — 可视化金融数据面板"
+    )
+    parser.add_argument(
+        "port", nargs="?", type=int, default=8080,
+        help="监听端口 (默认: 8080)"
+    )
+    parser.add_argument(
+        "--host", default="0.0.0.0",
+        help="绑定地址 (默认: 0.0.0.0)"
+    )
+    args = parser.parse_args()
+    print(f"\n  mcp-finance Dashboard v6 -> http://localhost:{args.port}\n")
+    app.run(host=args.host, port=args.port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":
     main()
-
