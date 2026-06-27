@@ -1,3 +1,12 @@
+## [0.12.8] - 2026-06-27
+### 新增
+- _reset_tdx() — TDX 连接重置机制，解决 zlib 解压失败后连接复用导致持续故障
+- _call_tdx_with_timeout() 解码错误重试 — 捕获 TdxDecodeError 后重置连接 + 重试 1 次
+- Dashboard 板块接口重试 — zlib 错误时自动重置连接并重试，失败后降级到 AKShare
+- _get_single_quote 解码错误检测 — TdxDecodeError 时重置连接避免后续调用污染
+### 优化
+- 重构 README.md 和 README.en.md — 视觉效果增强，完整 31 工具列表，Mermaid 架构图
+
 # Changelog
 ## [0.8.0] - 2025-06
 ### 新增

@@ -1,47 +1,158 @@
-<h1 align="center">mcp-finance</h1>
+<h1 align="center">
+  mcp-markets
+</h1>
+
 <p align="center">
-  <strong>MCP Server for Global Financial Markets</strong><br>
-   29 tools · 3 markets · Millisecond-level quotes
+  <strong>Global Financial Market MCP Server</strong><br>
+  <em>AI-powered access to China A-Shares · HK · US Stocks · Futures</em>
 </p>
 
 <p align="center">
-  <a href="README.md">中文</a> ·
-  <a href="https://github.com/ojkkk/mcp-finance">GitHub</a> ·
-  <a href="https://pypi.org/project/mcp-markets/">PyPI</a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/MCP-1.4+-purple" alt="MCP">
-  <img src="https://img.shields.io/badge/version-0.9.5-orange" alt="v0.9.0">
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT">
+  <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/v/mcp-markets?color=blue&label=PyPI" alt="PyPI"></a>
+  <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/pyversions/mcp-markets?color=blue" alt="Python"></a>
+  <a href="https://github.com/ojkkk/mcp-finance"><img src="https://img.shields.io/github/stars/ojkkk/mcp-finance?style=social" alt="Stars"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"></a>
+  <br>
+  <img src="https://img.shields.io/badge/tools-31-blueviolet" alt="31 Tools">
+  <img src="https://img.shields.io/badge/A_Shares-%E2%9C%93-red" alt="A Shares">
+  <img src="https://img.shields.io/badge/HK_Stocks-%E2%9C%93-orange" alt="HK">
+  <img src="https://img.shields.io/badge/US_Stocks-%E2%9C%93-darkblue" alt="US">
+  <img src="https://img.shields.io/badge/Futures-%E2%9C%93-teal" alt="Futures">
 </p>
 
 ---
 
-## Overview
+## Quick Start
 
-`mcp-finance` is an MCP server that gives AI assistants (Claude / Codex / Cursor) access to real-time financial data across **A-shares, HK, US, and futures markets**. Built on **easy-tdx** (millisecond-level) + **AKShare** + **yfinance** triple data source with 29 tools covering quotes, K-line, technical indicators, screening, backtesting, and analysis.
-
----
-
-## Install
-
-```bash
+`ash
 pip install mcp-markets
-```
 
-Requires Python 3.10+. Core dependencies: `easy-tdx` `akshare` `plotly` `backtrader` `pandas` `numpy` `pydantic`.
+# Run as MCP Server (for Claude / Codex / Cursor)
+python -m mcp_finance.server
+
+# Launch built-in Web Dashboard
+mcp-dashboard              # http://localhost:8080
+`
+
+> Python 3.10+ · Zero config needed · Optional TUSHARE_TOKEN for advanced fundamentals
+
+---
+
+## Architecture
+
+`mermaid
+graph LR
+    A["Data Sources"] --> B["easy-tdx<br/>TDX TCP · &lt;50ms"]
+    A --> C["AKShare<br/>Sina/THS/EastMoney"]
+    A --> D["yfinance<br/>Fallback"]
+    A --> E["Tushare<br/>Fundamentals"]
+
+    B --> F["31 MCP Tools"]
+    C --> F
+    D --> F
+    E --> F
+
+    F --> G["Quotes<br/>Real-time · Batch · K-line"]
+    F --> H["Technical<br/>MA·MACD·KDJ·RSI·BOLL"]
+    F --> I["Screening<br/>11-dim + 5-factor ranking"]
+    F --> J["Backtesting<br/>9 strategies · Bayesian opt"]
+    F --> K["Portfolio<br/>Comparison · Correlation"]
+    F --> L["Fundamentals<br/>Financials · Research · Flow"]
+    F --> M["Dashboard<br/>Flask Web · Dark theme"]
+
+    style A fill:#1a1a2e,stroke:#e94560,color:#fff
+    style F fill:#16213e,stroke:#0f3460,color:#fff
+    style M fill:#e94560,color:#fff
+`
+
+---
+
+## 31 MCP Tools
+
+### Quote & Market Data
+
+| Tool | Description | Source |
+|------|-------------|--------|
+| get_realtime_quote | Single stock real-time quote | easy-tdx → AKShare → yfinance |
+| atch_quotes | Batch query multiple stocks | easy-tdx |
+| get_kline | Daily/Weekly/Monthly K-line with adjust | easy-tdx / AKShare+yfinance |
+| get_minute_kline | 1/5/15/30/60 min K-line (A-shares only) | easy-tdx |
+| get_market_indices | A-share / HK / US market indices | easy-tdx → AKShare |
+| get_futures_list | China commodity & index futures | AKShare Sina |
+| search_stock | Fuzzy search by code or name | Local mapping |
+
+### Technical Analysis
+
+| Tool | Description |
+|------|-------------|
+| get_technical_indicators | MA·MACD·KDJ·RSI·BOLL·WR·BIAS + signal detection |
+| plot_kline | Interactive candlestick HTML with indicators |
+
+### Screening & Analysis
+
+| Tool | Description |
+|------|-------------|
+| stock_screener | 11-dimension conditional screening |
+| actor_screener | 5-factor ranking (momentum, value, quality, growth, volatility) |
+| nalyze_stock | One-stop stock analysis (quote+tech+financials+score 0-100) |
+| compare_stocks | Multi-stock comparison ranked by score |
+| correlation_matrix | Return correlation matrix for diversification |
+
+### Backtesting & Optimization
+
+| Tool | Description | Strategies |
+|------|-------------|------------|
+| acktest_strategy | Single stock backtest | MA Cross · MACD · RSI · KDJ · BOLL · Turtle · Vol Trend · Mean Rev · Custom |
+| optimize_strategy | Grid search / Optuna Bayesian optimization | Auto-pruning + parameter importance |
+| portfolio_backtest | Multi-stock portfolio backtest | Custom weights / equal weight |
+
+### Market Intelligence
+
+| Tool | Description |
+|------|-------------|
+| get_sector_ranking | Industry/Concept sector rankings |
+| get_north_flow | North/South-bound capital flow |
+| get_fund_flow | Individual stock fund flow (ms-level via easy-tdx) |
+| get_dragon_tiger | Dragon & Tiger list (brokerage buy/sell details) |
+| get_block_trades | Block trade details |
+| get_margin_trading | Margin trading & short selling data |
+| get_macro_data | China macro economics (GDP/CPI/PMI/M2/FX reserves) |
+
+### Fundamentals
+
+| Tool | Description |
+|------|-------------|
+| get_financials | 5 categories, 19+ indicators (core/profitability/growth/risk/operations) |
+| get_institutional_holdings | Top 10 shareholders & institutional holdings |
+| get_research_reports | Analyst research reports (ratings + price targets) |
+| comparison_chart | Multi-stock normalized comparison chart (interactive HTML) |
+| 	est_data_sources | One-click diagnostic of all data sources |
+
+---
+
+## Web Dashboard
+
+Built-in Flask dashboard with dark theme and Plotly interactive charts.
+
+`ash
+mcp-dashboard              # http://localhost:8080
+mcp-dashboard 3000         # Custom port
+`
+
+| Page | Route | Features |
+|------|-------|----------|
+| **Market Overview** | / | Indices · Hot stocks · Sectors · North flow · K-line lookup |
+| **Screener** | /screener | 5-factor ranking + 11-dim conditional screening |
+| **Backtest** | /backtest | 9 strategies · Grid/Bayesian optimization · Walk-Forward · Monte Carlo |
 
 ---
 
 ## MCP Client Setup
 
-### Claude Desktop
+<details>
+<summary><b>Claude Desktop</b></summary>
 
-Edit `claude_desktop_config.json`:
-
-```json
+`json
 {
   "mcpServers": {
     "mcp-finance": {
@@ -50,17 +161,21 @@ Edit `claude_desktop_config.json`:
     }
   }
 }
-```
+`
+</details>
 
-### Codex
+<details>
+<summary><b>Codex</b></summary>
 
-```bash
+`ash
 codex mcp add mcp-finance -- python -m mcp_finance.server
-```
+`
+</details>
 
-### Cursor / VS Code
+<details>
+<summary><b>Cursor / VS Code</b></summary>
 
-```json
+`json
 {
   "mcpServers": {
     "mcp-finance": {
@@ -70,150 +185,51 @@ codex mcp add mcp-finance -- python -m mcp_finance.server
     }
   }
 }
-```
+`
+</details>
 
----
-
-## Tools (29 total)
-
-### Quotes
-| Tool | Description | Coverage |
-|------|-------------|----------|
-| `get_realtime_quote` | Real-time quote for single stock | A / HK / US / Futures |
-| `batch_quotes` | Batch quotes | A / HK / US |
-| `get_market_indices` | Major indices | SSE / SZSE / HSI / DJI / NASDAQ / SPX |
-| `get_futures_list` | Futures contracts list | China commodity + index futures |
-| `search_stock` | Stock search (local, ms-level) | A / HK / US |
-
-### K-line
-| Tool | Description | Coverage |
-|------|-------------|----------|
-| `get_kline` | Daily/weekly/monthly K-line with adjust | A / HK / US / Futures |
-| `get_minute_kline` | Minute-level K-line (1/5/15/30/60min) | A-shares only |
-
-### Technical Analysis
-| Tool | Description |
-|------|-------------|
-| `get_technical_indicators` | MA / MACD / KDJ / RSI / BOLL / WR / BIAS with signal detection |
-| `plot_kline` | Interactive K-line chart (candlestick + MA + MACD/KDJ/RSI subplots) |
-| `comparison_chart` | Multi-stock normalized comparison chart |
-
-### Financials & Market
-| Tool | Description |
-|------|-------------|
-| `get_financials` | Core financial data (revenue, net profit, ROE, etc.) |
-| `get_sector_ranking` | Industry/concept sector performance ranking |
-| `get_north_flow` | Northbound / Southbound capital flow |
-| `get_dragon_tiger` | Dragon & Tiger board daily details |
-| `get_block_trades` | Block trade records |
-| `get_margin_trading` | Margin trading data |
-
-### Fund Flow & Ownership
-| Tool | Description |
-|------|-------------|
-| `get_fund_flow` | Main capital net inflow (easy-tdx real-time) |
-| `get_institutional_holdings` | Top 10 shareholders |
-
-### Macro & Research
-| Tool | Description |
-|------|-------------|
-| `get_macro_data` | GDP / CPI / PMI / Money Supply / FX Reserves |
-| `get_research_reports` | Analyst reports with ratings & earnings forecasts |
-
-### Screening
-| Tool | Description |
-|------|-------------|
-| `stock_screener` | Multi-condition screener (gain, volume ratio, PE, PB, ROE, etc.) |
-| `factor_screener` | 5-factor scoring (momentum, value, quality, growth, volatility) |
-
-### Backtesting
-| Tool | Description |
-|------|-------------|
-| `backtest_strategy` | 8 strategies (MA cross, MACD, RSI, KDJ, BOLL, Turtle, Vol Trend, Mean Reversion) |
-| `optimize_strategy` | Grid search parameter optimization |
-| `portfolio_backtest` | Multi-stock portfolio backtest (custom weights) |
-
-### Analysis
-| Tool | Description |
-|------|-------------|
-| `analyze_stock` | Comprehensive analysis with 0-100 score |
-| `compare_stocks` | Multi-stock comparison & ranking |
-| `correlation_matrix` | Correlation matrix with low-correlation pairs |
-
-### System
-| Tool | Description |
-|------|-------------|
-| `test_data_sources` | Diagnose all data source availability |
-
----
-
-## Usage Examples
-
-| Task | Prompt |
-|------|--------|
-| Quote | "What is Moutai (600519) trading at?" |
-| K-line chart | "Plot 120-day K-line for 600519 with MACD and RSI" |
-| Technical | "Analyze BYD technical indicators, any golden cross?" |
-| Fund flow | "What is Moutai main capital inflow today?" |
-| Screen | "A-shares with gain >3%, volume ratio >1.5, PE <30" |
-| Factor | "Top 20 A-shares by 5-factor score" |
-| Backtest | "Backtest MA(5,20) crossover on Midea for 2024" |
-| Optimize | "Find optimal MA params for Midea" |
-| Portfolio | "Equal-weight backtest for Moutai + CATL + CMB last year" |
-| Analyze | "Give me a full analysis report for 600519" |
-| Compare | "Compare Moutai vs Wuliangye vs Luzhou Laojiao vs Fenjiu" |
-| Correlation | "Correlation between Moutai and Wuliangye?" |
-| Macro | "Latest year CPI data for China" |
-| Research | "Latest analyst reports for 600519" |
-| HK/US | "What is Tencent (00700) / Apple (AAPL) trading at?" |
-
----
-
-## Data Sources
-
-| Source | Description | Latency |
-|--------|-------------|---------|
-| **easy-tdx** | Direct TCP connection to TDX servers for quotes/K-line/fund flow | <1ms |
-| **AKShare** | Sina/Tonghuashun/Eastmoney for financials/sectors/dragon-tiger/research | ~1s |
-| **yfinance** | Yahoo Finance fallback for HK/US stocks | ~1s |
-
----
-
-## Project Structure
-
-```
-mcp_finance/
-  server.py           MCP routing & tool registration
-  api.py              Triple data source layer
-  api_extended.py      Minute K-line / Fund flow / Institutional / Macro / Research
-  analysis.py          Stock scoring / Multi-factor / Comparison
-  portfolio.py         Portfolio backtest / Correlation matrix
-  indicators.py        9 technical indicators + signal detection
-  backtest.py          Backtrader backtesting engine
-  chart.py             Plotly interactive charts / Comparison charts
-  screener.py          Stock screener
-  cache.py             TTL memory + disk cache
-  validators.py        Pydantic parameter validation
-  errors.py            Unified error types
-  logging_config.py    Logging configuration
-tests/
-  test_indicators.py   Indicator unit tests
-  test_screener.py     Screener unit tests
-```
+> **Optional: Tushare** — Set TUSHARE_TOKEN=your_token env var for PE/PB/ROE data. [Register free](https://tushare.pro). Falls back gracefully without it.
 
 ---
 
 ## Development
 
-```bash
+`ash
 git clone https://github.com/ojkkk/mcp-finance.git
 cd mcp-finance
 pip install -e ".[dev]"
 pytest tests/ -v
-```
+ruff check mcp_finance/
+`
+
+---
+
+## AI Conversation Examples
+
+| Scenario | Natural Language Query |
+|----------|----------------------|
+| Quote | "What's the price of Kweichow Moutai (600519)?" |
+| Technical | "Is Moutai's MACD golden cross? What's the RSI?" |
+| Screening | "Find A-shares with gain >3%, volume ratio >1.5, PE <30" |
+| Backtest | "Backtest MA cross (5,20) on Moutai for 2024" |
+| Portfolio | "Backtest equal-weight portfolio of Moutai + CATL + CMB" |
+| Analysis | "Give me a comprehensive analysis of Moutai" |
+| Macro | "Show me recent CPI data for China" |
+
+---
+
+## Disclaimer
+
+> **This tool is for educational purposes only. All data is for reference and does not constitute investment advice.**
+
+- Data sourced from third-party public APIs and web scraping with **no guarantee of accuracy, completeness, or timeliness**
+- **No proprietary data sources**; all data depends on easy-tdx (reverse-engineered TDX protocol), AKShare (web scraping), yfinance, and Tushare
+- **No commercial data license**; personal non-commercial use is fine, **commercial use carries copyright and compliance risks**
+- Backtest results do not predict future performance
+- **The author bears no responsibility for any investment losses**
 
 ---
 
 ## License
 
-MIT
+MIT © [mcp-markets](https://github.com/ojkkk/mcp-finance)

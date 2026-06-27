@@ -99,38 +99,52 @@ def api_indices():
 def api_sectors():
     st = request.args.get("type", "industry")
     tn = int(request.args.get("top_n", 20))
-    # Try TDX first
-    try:
-        from mcp_finance.api import _get_tdx
-        tdx = _get_tdx()
-        if tdx:
-            df = tdx.get_board_list()
-            if df is not None and not df.empty:
-                df = df[df["price"] > 0.01].copy()
-                codes = df["code"].astype(str)
-                if st == "industry":
-                    df = df[codes.str.startswith("880")]
-                elif st == "concept":
-                    df = df[codes.str.startswith("881")]
-                if not df.empty:
-                    df["涨跌幅"] = ((df["price"] - df["pre_close"]) / df["pre_close"] * 100).round(2)
-                    df["涨跌额"] = (df["price"] - df["pre_close"]).round(2)
-                    df["_sort"] = df["涨跌幅"].abs()
-                    df = df.nlargest(tn, "_sort")
-                    result = []
-                    for _, row in df.iterrows():
-                        result.append({
-                            "代码": str(row.get("code", "")),
-                            "名称": str(row.get("name", "")),
-                            "最新价": _sf(row.get("price")),
-                            "涨跌幅": _sf(row.get("涨跌幅")),
-                            "涨跌额": _sf(row.get("涨跌额")),
-                            "昨收": _sf(row.get("pre_close")),
-                            "涨速": _sf(row.get("rise_speed")),
-                        })
-                    return jsonify({"data": result, "error": None})
-    except Exception as e:
-        _log.warning(f"TDX sectors: {e}")
+    # Try TDX first (with retry on zlib/decode errors: corrupted TCP data)
+    for tdx_attempt in range(2):
+        try:
+            from mcp_finance.api import _get_tdx, _reset_tdx
+            tdx = _get_tdx()
+            if tdx:
+                df = tdx.get_board_list()
+                if df is not None and not df.empty:
+                    df = df[df["price"] > 0.01].copy()
+                    codes = df["code"].astype(str)
+                    if st == "industry":
+                        df = df[codes.str.startswith("880")]
+                    elif st == "concept":
+                        df = df[codes.str.startswith("881")]
+                    if not df.empty:
+                        df["涨跌幅"] = ((df["price"] - df["pre_close"]) / df["pre_close"] * 100).round(2)
+                        df["涨跌额"] = (df["price"] - df["pre_close"]).round(2)
+                        df["_sort"] = df["涨跌幅"].abs()
+                        df = df.nlargest(tn, "_sort")
+                        result = []
+                        for _, row in df.iterrows():
+                            result.append({
+                                "代码": str(row.get("code", "")),
+                                "名称": str(row.get("name", "")),
+                                "最新价": _sf(row.get("price")),
+                                "涨跌幅": _sf(row.get("涨跌幅")),
+                                "涨跌额": _sf(row.get("涨跌额")),
+                                "昨收": _sf(row.get("pre_close")),
+                                "涨速": _sf(row.get("rise_speed")),
+                            })
+                        return jsonify({"data": result, "error": None})
+            break  # Success — exit retry loop
+        except Exception as e:
+            error_type = type(e).__name__
+            error_msg = str(e)
+            is_decode_err = ("TdxDecodeError" in error_type or "zlib" in error_msg.lower()
+                             or "decompress" in error_msg.lower() or "TdxError" in error_type)
+            if is_decode_err and tdx_attempt == 0:
+                _log.warning(f"TDX sectors decode error (attempt 1/2), resetting: {e}")
+                try:
+                    _reset_tdx()
+                except Exception:
+                    pass
+                continue
+            _log.warning(f"TDX sectors: {e}")
+            break
 
     # Fallback to AKShare
     try:

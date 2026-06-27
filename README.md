@@ -1,87 +1,168 @@
-<h1 align="center">mcp-finance</h1>
+<h1 align="center">
+  <img src="https://raw.githubusercontent.com/ojkkk/mcp-finance/main/docs/logo.svg" alt="logo" width="40" style="vertical-align:middle" onerror="this.style.display='none'" />
+  mcp-markets
+</h1>
+
 <p align="center">
-  <strong>MCP Server for Global Financial Markets</strong><br>
-   29+ tools · 3 markets · Millisecond-level quotes
+  <strong>全市场金融数据 MCP Server</strong><br>
+  <em>让 AI 助手看懂 A股 · 港股 · 美股 · 期货</em>
 </p>
 
 <p align="center">
-  <a href="README.en.md">English</a> ·
-  <a href="https://github.com/ojkkk/mcp-finance">GitHub</a> ·
-  <a href="https://pypi.org/project/mcp-markets/">PyPI</a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/MCP-1.4+-purple" alt="MCP">
-  <img src="https://img.shields.io/badge/version-0.9.6-orange" alt="v0.9.0">
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT">
+  <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/v/mcp-markets?color=blue&label=PyPI" alt="PyPI"></a>
+  <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/pyversions/mcp-markets?color=blue" alt="Python"></a>
+  <a href="https://github.com/ojkkk/mcp-finance"><img src="https://img.shields.io/github/stars/ojkkk/mcp-finance?style=social" alt="Stars"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"></a>
+  <br>
+  <img src="https://img.shields.io/badge/tools-31-blueviolet" alt="Tools">
+  <img src="https://img.shields.io/badge/A%E8%82%A1-%E2%9C%93-red" alt="A股">
+  <img src="https://img.shields.io/badge/%E6%B8%AF%E8%82%A1-%E2%9C%93-orange" alt="港股">
+  <img src="https://img.shields.io/badge/%E7%BE%8E%E8%82%A1-%E2%9C%93-darkblue" alt="美股">
+  <img src="https://img.shields.io/badge/%E6%9C%9F%E8%B4%A7-%E2%9C%93-teal" alt="期货">
 </p>
 
 ---
 
-## ⚠️ 重要免责声明
+## ⚡ 快速开始
 
-> **本工具仅供学习交流使用，所有数据仅供参考，不构成任何投资建议。**
-
-### 数据与合规
-- 数据来源于第三方公开接口与网页爬虫，**不作任何准确性、完整性、及时性的保证**
-- **无自有数据源**，全部依赖第三方：
-  - **easy-tdx** 依赖通达信公开 TCP 服务器，非官方 API
-  - **AKShare** 受站点改版影响极大，接口随时可能失效
-  - **yfinance** 依赖 Yahoo Finance 公开接口
-  - **Tushare** 为第三方社区数据平台
-- 数据**无合规授权**，个人非商用无问题，**企业商用存在明确版权与合规风险**
-
-### 回测与决策
-- 回测结果不代表未来表现，**历史收益不预示未来收益**
-- 使用者应独立判断并承担投资风险，**作者不对任何投资损失负责**
-- 回测功能仅供学习量化策略的基本概念，不构成交易建议
-
-### 当前能力与局限
-
-| 维度 | 已支持 | 仍缺失 |
-|------|--------|--------|
-| **策略** | 8 种预设 + 自定义组合策略(AND/OR) | 无深度学习/AI 策略 |
-| **优化** | 网格扫描 + Optuna TPE 贝叶斯优化 | — |
-| **验证** | Walk-Forward 样本外 + 蒙特卡洛稳健性 | 无交叉验证 |
-| **滑点** | 固定百分比 / 固定点数 / bar_impact / volume_share | 无真实 tick 级模拟 |
-| **手续费** | A股万分之三 + 港美股差异化费率 | 无 min 佣金 |
-| **财务** | 19+核心指标(营收/净利润/EPS/ROE/ROA/毛利率/净利率/营收增长率/资产负债率/流动比率等)，5大分类(核心/盈利/成长/风险/营运)，历史明细(同花顺) | 无一致预期、盈利预测 |
-| **高频数据** | A股 1/5/15/30/60 分钟 K 线 | 港美股无分钟数据 |
-| **市场覆盖** | A股 / 港股 / 美股 / 国内期货 | 无期权/外汇/加密货币 |
-
-> **结论**: 本工具定位为 AI 助手的金融数据学习工具，**无法满足专业量化需求**。
-
-### 使用前提
-- **本工具定位为 AI 助手的金融数据学习工具，非专业交易/投资平台**
-- 任何依赖本工具数据做出的投资决策，风险自负
-- **强烈建议仅用于学习 MCP 协议开发、数据分析练习等非商业场景**
-
----
-
-## 简介
-
-`mcp-finance` 是一个面向 AI 助手（Claude / Codex / Cursor 等 MCP 客户端）的金融数据服务，基于 **easy-tdx**（通达信毫秒级） + **Tushare**（财务数据） + **AKShare** + **yfinance** 四数据源，覆盖 **A股、港股、美股、期货**四大市场，提供行情、K线、技术指标、选股、回测、分析等 29 个工具。
-
----
-
-## 安装
-
-```bash
+`ash
 pip install mcp-markets
-```
 
-Python 3.10+，核心依赖：`easy-tdx` `akshare` `plotly` `backtrader` `pandas` `numpy` `pydantic`。
+# 方式一：作为 MCP Server 运行（供 Claude / Codex / Cursor 调用）
+python -m mcp_finance.server
+
+# 方式二：启动内置 Web Dashboard
+mcp-dashboard              # 默认 http://localhost:8080
+`
+
+> Python 3.10+ · 零配置即可使用 · 可选设置 TUSHARE_TOKEN 环境变量启用高级财务数据
 
 ---
 
-## 配置 MCP 客户端
+## 📊 功能全景
 
-### Claude Desktop
+`mermaid
+graph LR
+    A["📡 数据源"] --> B["⚡ easy-tdx<br/>通达信TCP · 毫秒级"]
+    A --> C["🌐 AKShare<br/>新浪/同花顺/东方财富"]
+    A --> D["🌍 yfinance<br/>Yahoo Finance 兜底"]
+    A --> E["📈 Tushare<br/>PE/PB/ROE 深度财务"]
 
-编辑 `claude_desktop_config.json`：
+    B --> F["🔧 31 MCP Tools"]
+    C --> F
+    D --> F
+    E --> F
 
-```json
+    F --> G["📈 行情<br/>实时价/批量/K线"]
+    F --> H["🔬 技术分析<br/>MA·MACD·KDJ·RSI·BOLL"]
+    F --> I["📋 选股<br/>条件筛选·五因子排名"]
+    F --> J["⚙️ 回测<br/>9策略·贝叶斯优化"]
+    F --> K["📊 组合<br/>多股对比·相关性·Portfolio"]
+    F --> L["🏢 基本面<br/>财务·研报·龙虎榜·大宗"]
+    F --> M["🖥️ Dashboard<br/>Flask Web · 深色主题"]
+
+    style A fill:#1a1a2e,stroke:#e94560,color:#fff
+    style F fill:#16213e,stroke:#0f3460,color:#fff
+    style G fill:#0f3460,color:#fff
+    style H fill:#0f3460,color:#fff
+    style I fill:#0f3460,color:#fff
+    style J fill:#0f3460,color:#fff
+    style K fill:#0f3460,color:#fff
+    style L fill:#0f3460,color:#fff
+    style M fill:#e94560,color:#fff
+`
+
+---
+
+## 🎯 全部 31 个 MCP 工具
+
+### 行情报价
+
+| 工具 | 功能 | 数据源 | 延迟 |
+|------|------|--------|------|
+| get_realtime_quote | 单股实时行情 (现价/涨跌幅/量比/换手率) | easy-tdx → AKShare → yfinance | < 100ms |
+| atch_quotes | 批量查询多只股票行情 | easy-tdx | < 1s / batch |
+| get_kline | 日/周/月 K线 + 前/后复权 | easy-tdx (A) / AKShare+yfinance (港美股) | < 500ms |
+| get_minute_kline | 1/5/15/30/60 分钟K线 (仅A股) | easy-tdx | < 200ms |
+| get_market_indices | A股 / 港股 / 美股 大盘指数 | easy-tdx → AKShare | < 500ms |
+| get_futures_list | 国内期货主力合约行情 | AKShare 新浪 | ~1s |
+| search_stock | 代码/名称模糊搜索 | 本地映射 | 即时 |
+
+### 技术分析
+
+| 工具 | 功能 |
+|------|------|
+| get_technical_indicators | MA·MACD·KDJ·RSI·BOLL·WR·BIAS + 金叉/死叉/超买超卖/均线排列自动识别 |
+| plot_kline | 交互式 K线HTML (蜡烛图+均线+成交量+MACD/KDJ/RSI副图) |
+
+### 选股 & 分析
+
+| 工具 | 功能 |
+|------|------|
+| stock_screener | 11维条件选股 (涨跌幅/量比/换手率/PE/PB/ROE/市值…) |
+| actor_screener | 五因子综合打分排名 (动量·价值·质量·增长·波动) |
+| nalyze_stock | 一站式个股分析报告 (行情+技术+财务+综合评分 0-100) |
+| compare_stocks | 多股横向对比，按评分排名 |
+| correlation_matrix | 收益率相关性矩阵 (辅助分散投资) |
+
+### 回测 & 优化
+
+| 工具 | 功能 | 策略 |
+|------|------|------|
+| acktest_strategy | 个股策略回测 | 双均线·MACD·RSI·KDJ·BOLL·海龟·波动率趋势·均值回归·自定义组合 |
+| optimize_strategy | 网格扫描 / Optuna TPE 贝叶斯优化 | 自动剪枝 + 参数重要性分析 |
+| portfolio_backtest | 多股组合回测 | 自定义权重 / 等权分配 |
+
+### 市场数据
+
+| 工具 | 功能 |
+|------|------|
+| get_sector_ranking | 行业/概念板块涨跌排行 |
+| get_north_flow | 北向/南向资金流向 |
+| get_fund_flow | 个股主力资金净流入 (easy-tdx 毫秒级) |
+| get_dragon_tiger | 龙虎榜 (营业部买卖明细) |
+| get_block_trades | 大宗交易明细 |
+| get_margin_trading | 融资融券数据 |
+| get_macro_data | 中国宏观经济 (GDP/CPI/PMI/M2/外汇储备) |
+
+### 基本面
+
+| 工具 | 功能 |
+|------|------|
+| get_financials | 5大类19+指标 (核心/盈利/成长/风险/营运) |
+| get_institutional_holdings | 十大流通股东 / 机构持仓 |
+| get_research_reports | 机构研报 (评级+目标价) |
+| comparison_chart | 多股走势对比图 (归一化交互HTML) |
+| 	est_data_sources | 一键诊断所有数据源可用性 |
+
+---
+
+## 🖥️ Web Dashboard
+
+内置 Flask Web 界面，可视化所有 MCP 工具能力。
+
+`ash
+mcp-dashboard              # http://localhost:8080
+mcp-dashboard 3000         # 指定端口
+# 或双击 start_dashboard.bat (Windows)
+`
+
+| 页面 | 路由 | 功能 |
+|------|------|------|
+| **行情总览** | / | 大盘指数 · 热门股票 · 板块排行 · 北向资金 · K线速查 · 股票搜索 |
+| **选股器** | /screener | 五因子排名 · 条件选股 (11维) · 实时筛选 |
+| **策略回测** | /backtest | 9策略回测 · 网格/贝叶斯优化 · Walk-Forward · 蒙特卡洛 |
+
+> 深色主题 · Plotly 交互图表 · 响应式布局
+
+---
+
+## 🔌 配置 MCP 客户端
+
+<details>
+<summary><b>Claude Desktop</b></summary>
+
+`json
 {
   "mcpServers": {
     "mcp-finance": {
@@ -90,17 +171,21 @@ Python 3.10+，核心依赖：`easy-tdx` `akshare` `plotly` `backtrader` `pandas
     }
   }
 }
-```
+`
+</details>
 
-### Codex
+<details>
+<summary><b>Codex</b></summary>
 
-```bash
+`ash
 codex mcp add mcp-finance -- python -m mcp_finance.server
-```
+`
+</details>
 
-### Cursor / VS Code
+<details>
+<summary><b>Cursor / VS Code</b></summary>
 
-```json
+`json
 {
   "mcpServers": {
     "mcp-finance": {
@@ -110,239 +195,77 @@ codex mcp add mcp-finance -- python -m mcp_finance.server
     }
   }
 }
-```
+`
+</details>
 
-### 可选：启用 Tushare 财务数据
-
-[Tushare](https://tushare.pro) 提供 PE/PB/ROE、季度财报等基本面数据。免费版需要注册并获取积分后才能使用。
-
-```bash
-# 注册 https://tushare.pro → 获取 token → 设置环境变量
-export TUSHARE_TOKEN=你的token   # Linux / Mac
-set TUSHARE_TOKEN=你的token       # Windows CMD
-$env:TUSHARE_TOKEN="你的token"    # Windows PowerShell
-```
-
-或在 MCP 客户端配置中传入：
-
-```json
-{
-  "mcpServers": {
-    "mcp-finance": {
-      "command": "python",
-      "args": ["-m", "mcp_finance.server"],
-      "env": { "TUSHARE_TOKEN": "你的token" }
-    }
-  }
-}
-```
-
-未设置或积分不足时，系统自动降级使用 AKShare / easy-tdx，不影响基础功能。
+> **可选：启用 Tushare 财务数据** — 设置环境变量 TUSHARE_TOKEN=你的token（注册 [tushare.pro](https://tushare.pro) 免费获取）。未设置时自动降级，不影响基础功能。
 
 ---
 
-## 全部工具 (29)
+## 🏗️ 四数据源架构
 
-### 行情
-| 工具 | 说明 | 覆盖 |
-|------|------|------|
-| `get_realtime_quote` | 单股实时行情 | A股/港股/美股/期货 |
-| `batch_quotes` | 批量行情查询 | A股/港股/美股 |
-| `get_market_indices` | 大盘指数 | 上证/深证/恒生/道琼斯等 |
-| `get_futures_list` | 期货主力合约列表 | 国内商品+股指期货 |
-| `search_stock` | 股票搜索（本地毫秒级） | A股/港股/美股 |
-
-### K线
-| 工具 | 说明 | 覆盖 |
-|------|------|------|
-| `get_kline` | 日/周/月K线，支持前/后复权 | A股/港股/美股/期货 |
-| `get_minute_kline` | 分钟K线（1/5/15/30/60分钟） | 仅A股 |
-
-### 技术分析
-| 工具 | 说明 |
-|------|------|
-| `get_technical_indicators` | MA/MACD/KDJ/RSI/BOLL/WR/BIAS + 金叉死叉/超买超卖信号 |
-| `plot_kline` | 交互式K线图（蜡烛图+均线+MACD/KDJ/RSI副图） |
-| `comparison_chart` | 多股走势对比图（归一化） |
-
-### 财务与市场
-| 工具 | 说明 |
-|------|------|
-| `get_financials` | 结构化财务数据：5类19+指标(营收/净利润/EPS/ROE/ROA/毛利率/净利率/营收增长率/资产负债率/流动比率等)+历史明细 |
-| `get_sector_ranking` | 行业/概念板块涨幅排行 |
-| `get_north_flow` | 北向/南向资金流向 |
-| `get_dragon_tiger` | 龙虎榜每日明细 |
-| `get_block_trades` | 大宗交易明细 |
-| `get_margin_trading` | 融资融券数据 |
-
-### 资金与机构
-| 工具 | 说明 |
-|------|------|
-| `get_fund_flow` | 主力净流入（easy-tdx 实时） |
-| `get_institutional_holdings` | 十大流通股东 |
-
-### 宏观与研报
-| 工具 | 说明 |
-|------|------|
-| `get_macro_data` | GDP / CPI / PMI / 货币供应量 / 外汇储备 |
-| `get_research_reports` | 个股研报（机构评级/盈利预测） |
-
-### 选股
-| 工具 | 说明 |
-|------|------|
-| `stock_screener` | 全市场条件筛选（涨跌幅/量比/PE/PB/ROE等） |
-| `factor_screener` | 五因子打分排名（动量/价值/质量/增长/波动） |
-
-### 回测
-| 工具 | 说明 |
-|------|------|
-| `backtest_strategy` | 8种策略回测（双均线/MACD/RSI/KDJ/BOLL/海龟/波动率/均值回归） |
-| `optimize_strategy` | 参数网格扫描优化 |
-| `portfolio_backtest` | 多股组合回测（支持自定义权重） |
-
-### 分析
-| 工具 | 说明 |
-|------|------|
-| `analyze_stock` | 综合评分（行情+技术+财务+均线 0-100分） |
-| `compare_stocks` | 多股横向对比排名 |
-| `correlation_matrix` | 相关性矩阵 + 低相关配对 |
-
-### 系统
-| 工具 | 说明 |
-|------|------|
-| `test_data_sources` | 诊断所有数据源可用性 |
+`
+┌─────────────────────────────────────────────┐
+│                 MCP Tools                    │
+├─────────────────────────────────────────────┤
+│  api.py  ──  三源智能路由                     │
+│  ├─ A股 实时/K线    → easy-tdx  (毫秒级)      │
+│  ├─ 板块/财务/龙虎榜 → AKShare  (秒级)         │
+│  ├─ 港美股行情      → AKShare → yfinance 兜底 │
+│  └─ 深度财务        → Tushare  (可选Token)    │
+├─────────────────────────────────────────────┤
+│  ⚡ easy-tdx    通达信TCP  · 协议逆向 · 延时<50ms │
+│  🌐 AKShare     新浪/同花顺 · 网页爬虫 · 延时~1s  │
+│  🌍 yfinance    Yahoo     · 非官方   · 延时~2s  │
+│  📈 Tushare     Token鉴权  · 需积分  · 延时~1s  │
+└─────────────────────────────────────────────┘
+`
 
 ---
 
-## 使用示例
+## 🧪 测试 & 开发
 
-| 场景 | 对话示例 |
-|------|----------|
-| 查行情 | "茅台(600519)现在什么价？" |
-| 画K线 | "画一张茅台120天日K线图，带上MACD和RSI" |
-| 技术分析 | "分析比亚迪的技术指标，有没有金叉信号？" |
-| 看资金 | "茅台今天主力净流入多少？" |
-| 条件选股 | "涨超3%、量比>1.5、换手率>5%、PE<30的股票" |
-| 多因子 | "五因子打分排名前20的A股" |
-| 策略回测 | "双均线(5,20)回测美的集团2024年全年" |
-| 参数优化 | "找美的集团双均线最优参数" |
-| 投资组合 | "茅台+宁德+招行等权组合回测近一年" |
-| 个股分析 | "给我一份茅台的综合分析报告" |
-| 多股对比 | "对比茅台、五粮液、老窖、汾酒" |
-| 相关性 | "茅台和五粮液的相关性？" |
-| 宏观数据 | "最近一年CPI数据" |
-| 看研报 | "茅台最新机构研报" |
-| 港股美股 | "腾讯港股 / 苹果股票 什么价？" |
-
----
-
-
----
-
-## Web Dashboard
-
-`mcp-finance` 内置了一个本地 Web 界面，将 MCP Tools 的能力包装为可视化面板。
-
-### 启动方式
-
-```bash
-# 方式一：双击项目根目录的脚本（推荐，自动杀旧进程）
-start_dashboard.bat          # Windows
-
-# 方式二：命令行启动
-mcp-dashboard                # 默认 http://localhost:8080
-mcp-dashboard 3000           # 指定端口
-
-# 方式三：直接运行模块
-python -m mcp_finance.dashboard.app
-```
-
-> 服务基于 Flask 提供，启动后浏览器访问 `http://localhost:8080`。
-
-### 功能页面
-
-| 页面 | 路径 | 说明 |
-|------|------|------|
-| **行情总览** | `/` | 大盘指数、热门股票、行业板块排行、北向资金、个股K线速查、股票搜索 |
-| **选股器** | `/screener` | 多因子排行（综合评分+动量+价值+质量+增长+波动）+ 条件选股（涨跌幅/换手率/量比/PE/PB/市值/ROE） |
-| **策略回测** | `/backtest` | 基础回测 + 参数优化（网格/贝叶斯）+ Walk-Forward 样本外验证 + 蒙特卡洛稳健性检验 |
-
-### 技术栈
-
-- **后端**：Flask（前后端数据格式兼容，不额外包层）
-- **数据源**：easy-tdx（毫秒级行情）+ AKShare（财务/板块/北向资金）+ yfinance（港美股兜底）+ Tushare（日线补充，需 Token）
-- **图表**：Plotly 交互式 K 线图 + 回测权益曲线
-- **UI**：响应式设计，深色主题
-
-## 数据源
-
-| 数据源 | 说明 | 延迟 | 合规性 |
-|--------|------|------|--------|
-| **easy-tdx** | 通达信 TCP 直连，主力行情/K线/资金流向 | 毫秒级 | ⚠️ 协议逆向，仅供学习 |
-| **Tushare** | PE/PB/ROE/季度财报，Token 鉴权（可选，需积分） | 免费版延迟15分钟 | ✅ Token 鉴权 |
-| **AKShare** | 新浪/同花顺/东方财富，板块/龙虎榜/研报 | 秒级 | ⚠️ 网页爬虫，仅供学习 |
-| **yfinance** | Yahoo Finance，港股美股兜底 | 秒级 | ⚠️ 非官方接口 |
-
----
-
-## 项目结构
-
-```
-mcp_finance/
-  server.py           MCP 路由与工具注册
-  api.py              三数据源封装层
-  api_extended.py      分钟K线 / 资金流向 / 机构持仓 / 宏观 / 研报
-  analysis.py          综合评分 / 多因子选股 / 多股对比
-  portfolio.py         组合回测 / 相关性矩阵
-  indicators.py        9大技术指标 + 信号识别
-  backtest.py          Backtrader 回测引擎
-  chart.py             Plotly 交互式图表 / 对比图
-  screener.py          全市场选股器
-  cache.py             TTL 内存+磁盘缓存
-  validators.py        Pydantic 参数校验
-  errors.py            统一错误处理
-  logging_config.py    日志配置
-tests/
-  test_indicators.py   指标单元测试
-  test_screener.py     选股器单元测试
-```
-
----
-
-## 开发
-
-```bash
+`ash
 git clone https://github.com/ojkkk/mcp-finance.git
 cd mcp-finance
 pip install -e ".[dev]"
+
+# 运行测试
 pytest tests/ -v
-```
+
+# 代码检查
+ruff check mcp_finance/
+`
 
 ---
 
----
+## 🌟 AI 对话示例
 
-## 局限与潜在风险
-
-### 数据源的天然短板
-
-- **无自有数据源**：全部依赖第三方公开接口与网页爬虫。TDX 依赖通达信公开服务器，AKShare 受站点改版影响极大，接口随时可能失效
-- **无合规授权**：数据无官方商业授权，个人学习非商用无问题，**企业商用存在明确版权风险**
-- **Tushare 需要积分**：免费注册后需通过贡献赚取积分才能调用 API，详见 [Tushare 积分规则](https://tushare.pro/document/1?doc_id=13)
-
-### 专业深度不足
-
-- **财务数据**：覆盖 19+ 核心指标（营收/净利润/EPS/ROE/ROA/毛利率/净利率/营收增长率/资产负债率/流动比率等），分5大类结构化返回。仍缺失明细财报（三表）、一致预期、盈利预测等高阶基本面数据
-- **高频数据**：分钟 K 线仅支持 A 股，港美股无高频数据
-- **回测能力**：偏入门级别，仅 8 种预设策略，参数优化为简单网格扫描，不支持自定义复杂策略、滑点/手续费精细化模拟，无法满足专业量化需求
-
-### 免责重申
-
-> **本工具仅供学习交流，所有数据仅供参考。投资有风险，入市需谨慎。作者不对任何因使用本工具产生的投资损失承担责任。**
+| 场景 | 自然语言提问 |
+|------|------------|
+| 行情 | "茅台现在什么价？" / "腾讯港股和苹果美股今天表现如何？" |
+| 技术分析 | "茅台 MACD 金叉了吗？RSI 到什么位置了？" |
+| 选股 | "找涨超3%、量比>1.5、PE<30 的股票" / "五因子排名前20" |
+| 回测 | "双均线(5,20)回测茅台2024年全年" / "找茅台最优MACD参数" |
+| 组合 | "茅台+宁德+招行等权组合回测近一年" |
+| 分析 | "给我茅台的综合分析报告" / "对比茅台、五粮液、老窖" |
+| 市场 | "最近CPI数据" / "北向资金最近在买什么？" |
+| 研报 | "看看机构对茅台的最新评级" |
 
 ---
 
-## License
+## ⚠️ 免责声明
 
-MIT
+> **本工具仅供学习交流，所有数据仅供参考，不构成任何投资建议。**
 
+- 数据来源于第三方公开接口与网页爬虫，**不作准确性、完整性、及时性保证**
+- **无自有数据源**，全部依赖 easy-tdx (通达信公开TCP) / AKShare (网页爬虫) / yfinance / Tushare
+- 数据**无合规商业授权**，个人非商用无问题，**企业商用存在版权与合规风险**
+- 回测结果不代表未来表现，**历史收益不预示未来收益**
+- **作者不对任何投资损失承担责任** · 投资有风险，入市需谨慎
+
+---
+
+## 📄 License
+
+MIT © [mcp-markets](https://github.com/ojkkk/mcp-finance)

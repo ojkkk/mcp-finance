@@ -59,6 +59,23 @@ def _call_with_net_timeout(func, timeout=None):
 # ── easy-tdx 客户端（懒加载）──────────────────────────────────────
 _tdx_client = None
 
+def _reset_tdx():
+    """重置 TDX 客户端（关闭旧连接，下次调用 _get_tdx 重建）"""
+    global _tdx_client
+    if _tdx_client is not None:
+        try:
+            if hasattr(_tdx_client, "_mac") and _tdx_client._mac is not None:
+                _tdx_client._mac.close()
+        except Exception:
+            pass
+        try:
+            if hasattr(_tdx_client, "_conn") and _tdx_client._conn is not None:
+                _tdx_client._conn.close()
+        except Exception:
+            pass
+    _tdx_client = None
+
+
 def _get_tdx():
     """懒加载 easy-tdx 统一客户端（5s 超时保护，防止 TCP 挂死）
     
@@ -196,20 +213,49 @@ def _lookup_name(code: str, market: str = "a") -> str:
 
 # ── easy-tdx 调用超时工具 ─────────────────────────────────────────
 def _call_tdx_with_timeout(func, timeout=10):
-    """统一 easy-tdx 调用超时保护（防止 TCP 挂死）"""
-    import threading as _t
-    result = [None]
-    done = [False]
-    def _target():
-        try:
-            result[0] = func()
-            done[0] = True
-        except Exception:
-            pass
-    th = _t.Thread(target=_target, daemon=True)
-    th.start()
-    th.join(timeout=timeout)
-    return result[0] if done[0] else None
+    """统一 easy-tdx 调用超时保护（防止 TCP 挂死）
+
+    M4 修复: TDX 服务器间歇性返回损坏的 zlib 数据（TdxDecodeError），
+    捕获后重置连接 + 重试一次，避免失效 TCP 连接被复用导致持续失败。
+    """
+    last_result = None
+    for attempt in range(2):
+        import threading as _t
+        result = [None]
+        done = [False]
+        error = [None]
+        def _target():
+            try:
+                result[0] = func()
+                done[0] = True
+            except Exception as e:
+                error[0] = e
+        th = _t.Thread(target=_target, daemon=True)
+        th.start()
+        th.join(timeout=timeout)
+        if done[0]:
+            return result[0]
+        if error[0] is not None:
+            error_type = type(error[0]).__name__
+            error_msg = str(error[0])
+            # 检测是否为 easy-tdx 的解码/解析错误（zlib/TdxDecodeError 等）
+            if "TdxDecodeError" in error_type or "TdxError" in error_type or "zlib" in error_msg.lower() or "decompress" in error_msg.lower():
+                _api_logger.warning("TDX 数据解析异常 (%s)，重置连接并重试 (attempt %d/2)", error_type, attempt + 1)
+                _reset_tdx()
+                last_result = None
+                continue
+            else:
+                _api_logger.warning("TDX 调用异常: %s", error[0])
+                return None
+        # 超时（th still alive）
+        if th.is_alive():
+            _api_logger.warning("TDX 调用超时 (%ss)，重置连接 (attempt %d/2)", timeout, attempt + 1)
+            _reset_tdx()
+            last_result = None
+            continue
+        return None
+    _api_logger.warning("TDX 调用最终失败 (2 attempts exhausted)")
+    return None
 
 
 def _resample_kline(df, period, date_col="date"):
@@ -284,7 +330,13 @@ def _get_single_quote(code, market="a"):
             try:
                 tdx_result = future.result(timeout=5)
             except (FuturesTimeoutError, Exception) as e:
-                _api_logger.warning("easy-tdx 实时行情超时或异常: %s [%s]", type(e).__name__, code)
+                error_type = type(e).__name__
+                error_msg = str(e)
+                _api_logger.warning("easy-tdx 实时行情超时或异常: %s [%s]", error_type, code)
+                # 解码错误说明 TCP 连接数据已损坏，重置连接避免后续调用也失败
+                if "TdxDecodeError" in error_type or "zlib" in error_msg.lower() or "decompress" in error_msg.lower():
+                    _api_logger.warning("检测到 TDX 数据解析异常，重置连接 [%s]", code)
+                    _reset_tdx()
                 pass  # 超时或异常，走策略2
         except Exception as e:
             _api_logger.warning("easy-tdx 实时行情 submit 异常: %s [%s]", type(e).__name__, code)
