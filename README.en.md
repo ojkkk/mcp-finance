@@ -131,8 +131,6 @@ graph LR
 |------|-------------|------------|
 | `backtest_strategy` | Single-stock strategy backtest | MA Cross · MACD · RSI · KDJ · BOLL · Turtle · Vol Trend · Mean Reversion · Custom Combo |
 | `optimize_strategy` | Grid search / Optuna TPE Bayesian optimization | Auto-pruning + parameter importance |
-| `walk_forward` | Walk-Forward robustness test | Anti-overfitting |
-| `monte_carlo_test` | Monte Carlo simulation | Strategy robustness evaluation |
 | `portfolio_backtest` | Multi-stock portfolio backtest | Custom weights / equal weight |
 
 ### Market Intelligence
@@ -172,7 +170,7 @@ mcp-dashboard 3000         # custom port
 |------|-------|----------|
 | **Market Overview** | `/` | Indices · Hot stocks · Sector rankings · North flow · K-line lookup · Search |
 | **Screener** | `/screener` | 5-factor ranking + 11-dimension conditional screening |
-| **Backtest** | `/backtest` | 9 strategies · Grid / Bayesian optimization · Walk-Forward · Monte Carlo |
+| **Backtest** | /backtest | 9 strategies · Grid / Bayesian optimization · Walk-Forward · Monte Carlo (Dashboard only) |
 
 > Responsive layout · Plotly / ECharts interactive charts · Live quote refresh
 

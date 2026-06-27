@@ -131,8 +131,6 @@ graph LR
 |------|------|------|
 | `backtest_strategy` | 个股策略回测 | 双均线·MACD·RSI·KDJ·BOLL·海龟·波动率趋势·均值回归·自定义组合 |
 | `optimize_strategy` | 网格扫描 / Optuna TPE 贝叶斯优化 | 自动剪枝 + 参数重要性分析 |
-| `walk_forward` | Walk-Forward 稳健性检验 | 防止过拟合 |
-| `monte_carlo_test` | 蒙特卡洛模拟 | 评估策略稳健性 |
 | `portfolio_backtest` | 多股组合回测 | 自定义权重 / 等权分配 |
 
 ### 市场数据
@@ -173,7 +171,7 @@ mcp-dashboard 3000         # 指定端口
 |------|------|------|
 | **行情总览** | `/` | 大盘指数 · 热门股票 · 板块排行 · 北向资金 · K线速查 · 股票搜索 |
 | **选股器** | `/screener` | 五因子排名 · 条件选股（11维）· 实时筛选 |
-| **策略回测** | `/backtest` | 9 策略回测 · 网格/贝叶斯优化 · Walk-Forward · 蒙特卡洛 |
+| **策略回测** | /backtest | 9 策略回测 · 网格/贝叶斯优化 · Walk-Forward · 蒙特卡洛（仅 Dashboard 提供） |
 
 > 响应式布局 · Plotly / ECharts 交互图表 · 实时行情自动刷新
 
