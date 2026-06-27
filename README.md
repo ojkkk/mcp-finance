@@ -1,72 +1,30 @@
 <div align="center">
 
-<!-- 🌊 顶部波浪动态背景 -->
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,20:0EA5E9,50:8B5CF6,80:EC4899,100:4F46E5&height=140&section=header&fontSize=0&desc=&descAlignY=70&descAlign=50" width="100%">
+<!-- 🌊 顶部动态波浪 + 大标题（服务端渲染，GitHub 兼容） -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,20:0EA5E9,50:8B5CF6,80:EC4899,100:4F46E5&height=200&section=header&text=mcp-markets&fontSize=52&fontColor=ffffff&fontAlignY=38&desc=%E5%85%A8%E5%B8%82%E5%9C%BA%E9%87%91%E8%9E%8D%E6%95%B0%E6%8D%AE%20MCP%20Server&descSize=18&descColor=c4b5fd&descAlignY=68" width="100%">
 
-<!-- ✨ 超大动态发光标题 -->
-<svg width="780" height="130" viewBox="0 0 780 130" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="brand" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#4F46E5">
-        <animate attributeName="stop-color" values="#4F46E5;#0EA5E9;#8B5CF6;#EC4899;#4F46E5" dur="6s" repeatCount="indefinite"/>
-      </stop>
-      <stop offset="50%" stop-color="#0EA5E9">
-        <animate attributeName="stop-color" values="#0EA5E9;#8B5CF6;#EC4899;#4F46E5;#0EA5E9" dur="6s" repeatCount="indefinite"/>
-      </stop>
-      <stop offset="100%" stop-color="#8B5CF6">
-        <animate attributeName="stop-color" values="#8B5CF6;#EC4899;#4F46E5;#0EA5E9;#8B5CF6" dur="6s" repeatCount="indefinite"/>
-      </stop>
-    </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-    <filter id="glow2" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
-  <text x="50%" y="88" text-anchor="middle" font-size="80" font-weight="800" letter-spacing="-3" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" fill="url(#brand)" filter="url(#glow2)">
-    mcp-markets
-    <animate attributeName="opacity" values="0.8;1;0.8" dur="3s" repeatCount="indefinite"/>
-  </text>
-  <text x="50%" y="88" text-anchor="middle" font-size="80" font-weight="800" letter-spacing="-3" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" fill="url(#brand)" filter="url(#glow)">
-    mcp-markets
-    <animate attributeName="opacity" values="0.9;1;0.9" dur="3s" repeatCount="indefinite"/>
-  </text>
-</svg>
+<!-- 📝 动态打字副标题：轮播核心卖点 -->
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&pause=900&color=6366F1&center=true&vCenter=true&width=620&lines=AI+%E5%8A%A9%E6%89%8B%E7%9C%8B%E6%87%82+A%E8%82%A1+%C2%B7+%E6%B8%AF%E8%82%A1+%C2%B7+%E7%BE%8E%E8%82%A1+%C2%B7+%E6%9C%9F%E8%B4%A7;31+%E4%B8%AA+MCP+%E5%B7%A5%E5%85%B7+%C2%B7+4+%E5%A4%A7%E6%95%B0%E6%8D%AE%E6%BA%90;9+%E7%A7%8D%E7%AD%96%E7%95%A5%E5%9B%9E%E6%B5%8B+%C2%B7+%E8%B4%9D%E5%8F%B6%E6%96%AF%E4%BC%98%E5%8C%96+%C2%B7+%E9%98%B2%E8%BF%87%E6%8B%9F;%E6%AF%AB%E7%A7%92%E7%BA%A7%E8%A1%8C%E6%83%85+%C2%B7+%E4%BA%A4%E4%BA%92%E5%BC%8FK%E7%BA%BF+%C2%B7+Web+%E7%9C%8B%E6%9D%BF" alt="tagline">
 
-<!-- 💫 动态打字副标题 -->
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&pause=800&color=6366F1&center=true&vCenter=true&width=560&lines=%E5%85%A8%E5%B8%82%E5%9C%BA%E9%87%91%E8%9E%8D%E6%95%B0%E6%8D%AE+MCP+Server;AI+%E5%8A%A9%E6%89%8B%E7%9C%8B%E6%87%82+A%E8%82%A1+%C2%B7+%E6%B8%AF%E8%82%A1+%C2%B7+%E7%BE%8E%E8%82%A1+%C2%B7+%E6%9C%9F%E8%B4%A7;31+%E4%B8%AA+MCP+%E5%B7%A5%E5%85%B7+%C2%B7+4+%E5%A4%A7%E6%95%B0%E6%8D%AE%E6%BA%90;9+%E7%A7%8D%E7%AD%96%E7%95%A5%E5%9B%9E%E6%B5%8B+%C2%B7+%E8%B4%9D%E5%8F%B6%E6%96%AF%E4%BC%98%E5%8C%96" alt="typing">
+<br>
 
-<p align="center">
-  <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/v/mcp-markets?color=4F46E5&label=PyPI&style=for-the-badge" alt="PyPI"></a>
-  <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/pyversions/mcp-markets?color=0EA5E9&style=for-the-badge" alt="Python"></a>
-  <a href="https://github.com/ojkkk/mcp-finance"><img src="https://img.shields.io/github/stars/ojkkk/mcp-finance?style=for-the-badge&color=FB923C" alt="Stars"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge" alt="MIT"></a>
-</p>
+<!-- 🔵 徽章行 -->
+<a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/v/mcp-markets?color=4F46E5&logo=pypi&logoColor=fff&style=flat-square" alt="PyPI Version"></a>
+<a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/dm/mcp-markets?color=0EA5E9&logo=pypi&logoColor=fff&style=flat-square" alt="Downloads"></a>
+<a href="https://github.com/ojkkk/mcp-finance"><img src="https://img.shields.io/github/stars/ojkkk/mcp-finance?style=flat-square&color=FB923C" alt="Stars"></a>
+<img src="https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=FBD34A&style=flat-square" alt="Python">
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-10B981?style=flat-square" alt="MIT License"></a>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Tools-31-8B5CF6?style=flat-square" alt="31 Tools">
-  <img src="https://img.shields.io/badge/A%E8%82%A1-%E2%9C%93-EF4444?style=flat-square" alt="A股">
-  <img src="https://img.shields.io/badge/%E6%B8%AF%E8%82%A1-%E2%9C%93-F97316?style=flat-square" alt="港股">
-  <img src="https://img.shields.io/badge/%E7%BE%8E%E8%82%A1-%E2%9C%93-3B82F6?style=flat-square" alt="美股">
-  <img src="https://img.shields.io/badge/%E6%9C%9F%E8%B4%A7-%E2%9C%93-14B8A6?style=flat-square" alt="期货">
-</p>
+<br>
 
-<!-- 🎬 动态滚动能力标签 -->
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=15&pause=600&color=0EA5E9&center=true&vCenter=true&width=520&lines=%E2%9A%A1+%E6%AF%AB%E7%A7%92%E7%BA%A7+A%E8%82%A1%E8%A1%8C%E6%83%85;%F0%9F%93%88+9+%E7%A7%8D%E7%AD%96%E7%95%A5%E5%9B%9E%E6%B5%8B+%C2%B7+%E8%B4%9D%E5%8F%B6%E6%96%AF%E4%BC%98%E5%8C%96;%F0%9F%94%8D+11+%E7%BB%B4%E6%9D%A1%E4%BB%B6%E9%80%89%E8%82%A1+%C2%B7+%E4%BA%94%E5%9B%A0%E5%AD%90%E6%8E%92%E5%90%8D;%F0%9F%8C%90+%E6%B8%AF%E8%82%A1%C2%B7%E7%BE%8E%E8%82%A1%C2%B7%E6%9C%9F%E8%B4%A7%E4%B8%80%E7%BD%91%E6%89%93%E5%B0%BD;%F0%9F%96%A5%87+Flask+Dashboard+%C2%B7+Plotly+%C2%B7+ECharts;%F0%9F%9B%A1%EF%B8%8F+Walk-Forward+%C2%B7+%E8%92%99%E7%89%B9%E5%8D%A1%E6%B4%9B+%C2%B7+%E9%98%B2%E8%BF%87%E6%8B%9F" alt="typing">
+<!-- 📦 能力标签 -->
+<img src="https://img.shields.io/badge/Tools-31-8B5CF6?style=flat-square" alt="31 Tools">
+<img src="https://img.shields.io/badge/A%E8%82%A1-%E2%9C%93-EF4444?style=flat-square" alt="A Shares">
+<img src="https://img.shields.io/badge/%E6%B8%AF%E8%82%A1-%E2%9C%93-F97316?style=flat-square" alt="HK">
+<img src="https://img.shields.io/badge/%E7%BE%8E%E8%82%A1-%E2%9C%93-3B82F6?style=flat-square" alt="US">
+<img src="https://img.shields.io/badge/%E6%9C%9F%E8%B4%A7-%E2%9C%93-14B8A6?style=flat-square" alt="Futures">
 
 </div>
-
-<!-- 底部波浪 -->
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,50:8B5CF6,100:EC4899&height=80&section=footer&fontSize=0" width="100%">
 
 ---
 
@@ -312,3 +270,8 @@ ruff check mcp_finance/
 ## 📄 License
 
 MIT © [mcp-markets](https://github.com/ojkkk/mcp-finance)
+
+<!-- 🌊 底部波浪 -->
+<div align="center">
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,50:8B5CF6,100:EC4899&height=100&section=footer&fontSize=0" width="100%">
+</div>
