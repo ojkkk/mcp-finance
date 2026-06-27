@@ -207,54 +207,42 @@ def portfolio_backtest(
     if len(price_data) < 1:
         return {"error": True, "message": "无有效数据"}
 
-    # 找到所有股票的共同日期范围
-    all_dates = set()
+    # 找到所有股票的共同交易日（交集，非并集）
+    # BUG-C5 修复: 原来用并集 + 缺失日填 0，导致跨市场组合当日市值塌缩为 0
+    date_sets = []
     for code, klines in price_data.items():
-        for k in klines:
-            all_dates.add(k["日期"])
-    common_dates = sorted(all_dates)
+        date_sets.append(set(k["日期"] for k in klines if "日期" in k))
+    if not date_sets:
+        return {"error": True, "message": "无有效日期数据"}
+    common_dates = sorted(set.intersection(*date_sets))
 
     if len(common_dates) < 20:
-        return {"error": True, "message": f"共同交易日太少 ({len(common_dates)}天)"}
+        return {"error": True, "message": f"共同交易日太少 ({len(common_dates)}天)，跨市场组合可能因交易日差异导致交集过小"}
 
-    # 构建价格矩阵
+    # 构建价格矩阵（仅共同日期，无需填 0）
     price_matrix: dict[str, dict[str, float]] = {}
     for code, klines in price_data.items():
         date_price = {k["日期"]: float(k["收盘价"]) for k in klines if "收盘价" in k}
-        price_matrix[code] = {}
-        for d in common_dates:
-            price_matrix[code][d] = date_price.get(d, 0)
+        price_matrix[code] = {d: date_price[d] for d in common_dates if d in date_price}
 
-    # 计算组合日收益率
+    # 计算组合市值
     portfolio_values = []
     prev_value = initial_capital
     daily_returns = []
 
-    for d in common_dates:
-        daily_return = 0.0
-        for i, code in enumerate(codes):
-            if code in price_matrix:
-                today = price_matrix[code].get(d, 0)
-                yesterday = price_matrix[code].get(prev_date if "prev_date" in dir() else common_dates[0], today)
-                # 用简单方法：计算每只股票的仓位价值
-                pass
-        
-        # 简化：直接用第一天初始化仓位
-        if not portfolio_values:
-            # 初始化分配
-            positions = {}
-            for i, code in enumerate(codes):
-                if code in price_matrix:
-                    price = price_matrix[code][d]
-                    if price > 0:
-                        shares = (initial_capital * weights[i]) / price
-                        positions[code] = {"shares": shares, "weight": weights[i]}
-            
-            total = initial_capital
-            portfolio_values.append({"日期": d, "市值": round(total, 2)})
-            continue
+    # 第一天初始化仓位
+    positions = {}
+    first_date = common_dates[0]
+    for i, code in enumerate(codes):
+        if code in price_matrix and first_date in price_matrix[code]:
+            price = price_matrix[code][first_date]
+            if price > 0:
+                shares = (initial_capital * weights[i]) / price
+                positions[code] = {"shares": shares, "weight": weights[i]}
+    portfolio_values.append({"日期": first_date, "市值": round(initial_capital, 2)})
 
-        # 计算当日市值
+    # 后续每日按持仓股数 × 当日收盘价计算市值
+    for d in common_dates[1:]:
         total = 0.0
         for code, pos in positions.items():
             if code in price_matrix and d in price_matrix[code]:
@@ -262,11 +250,9 @@ def portfolio_backtest(
                 if price > 0:
                     total += pos["shares"] * price
 
-        if portfolio_values:
-            prev_val = portfolio_values[-1]["市值"]
-            if prev_val > 0:
-                daily_returns.append((total - prev_val) / prev_val)
-
+        if prev_value > 0:
+            daily_returns.append((total - prev_value) / prev_value)
+        prev_value = total
         portfolio_values.append({"日期": d, "市值": round(total, 2)})
 
     if len(portfolio_values) < 2:
@@ -311,7 +297,7 @@ def portfolio_backtest(
         "夏普比率": sharpe,
         "最大回撤(%)": max_dd,
         "回测天数": trading_days,
-        "权益曲线": portfolio_values[:50] if len(portfolio_values) > 50 else portfolio_values,
+        "权益曲线": portfolio_values[-50:] if len(portfolio_values) > 50 else portfolio_values,
         "提示": f"权益曲线仅展示最近{min(50, len(portfolio_values))}个点",
     }
 

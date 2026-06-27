@@ -272,16 +272,28 @@ def get_research_reports(code: str, limit: int = 10) -> dict:
             return {"error": f"未获取到 {code} 的研报数据"}
 
         records = []
+        # BUG-L1 修复: AKShare 研报字段名含年份（如 "2026-盈利预测-收益"），硬编码会跨年失效
+        # 改为动态匹配当前年份 + 次年的盈利预测字段
+        from datetime import datetime as _dt
+        _cur_year = _dt.now().year
+        _next_year = _cur_year + 1
+        _cur_key = f"{_cur_year}-盈利预测-收益"
+        _next_key = f"{_next_year}-盈利预测-收益"
+        _cur_pe_key = f"{_cur_year}-盈利预测-市盈率"
+        _next_pe_key = f"{_next_year}-盈利预测-市盈率"
         for _, row in df.head(limit).iterrows():
-            records.append({
+            rec = {
                 "日期": str(row.get("日期", "")),
                 "机构": str(row.get("机构", "")),
                 "评级": str(row.get("东财评级", "")),
                 "标题": str(row.get("报告名称", "")),
-                "2026预测收益": row.get("2026-盈利预测-收益"),
-                "2026预测市盈率": row.get("2026-盈利预测-市盈率"),
                 "行业": str(row.get("行业", "")),
-            })
+            }
+            # 优先取次年预测（更前瞻），回退到当年
+            rec["预测年份"] = _next_year if row.get(_next_key) is not None else _cur_year
+            rec["预测收益"] = row.get(_next_key) or row.get(_cur_key)
+            rec["预测市盈率"] = row.get(_next_pe_key) or row.get(_cur_pe_key)
+            records.append(rec)
 
         return {
             "股票": STOCK_MAPPING.get(code, code),

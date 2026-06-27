@@ -171,7 +171,18 @@ def screen_stocks(
                         if need_revenue_growth and fin.get("revenue_growth") is not None:
                             item["_revenue_growth"] = fin["revenue_growth"]
 
-            # 主力净流入: 批量获取
+            # 主力净流入: 批量获取（H1 修复：原注释下方无实现，导致文档声称支持但从未生效）
+            # 仅在候选股数量合理时查询，避免拖慢选股
+            if candidate_codes and len(candidate_codes) <= _MAX_SLOW_LOOKUPS:
+                try:
+                    inflow_map = get_main_inflow_batch(candidate_codes)
+                    for item in candidates:
+                        code = item.get("f12", "")
+                        if code and code in inflow_map:
+                            item["_main_inflow"] = inflow_map[code]
+                except Exception:
+                    # 主力净流入查询失败不影响选股主流程
+                    pass
     matched: list[dict[str, Any]] = []
     for item in candidates:
         code = item.get("f12", "")

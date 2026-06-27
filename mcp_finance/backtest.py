@@ -920,10 +920,20 @@ def _get_index_benchmark(code: str, start_date: str, end_date: str, initial_capi
 def _get_stock_name(code: str) -> str:
     try:
         from mcp_finance.data import STOCK_MAPPING, HOT_STOCKS
-        name = STOCK_MAPPING.get(code, "")
+        # BUG-L2 修复: 港股/美股代码可能带后缀（如 600519.SH / AAPL.US），STOCK_MAPPING 用裸代码
+        # 先剥离常见后缀再查表
+        bare = code
+        for sep in (".", "-"):
+            if sep in bare:
+                parts = bare.split(sep)
+                # 只剥离已知的市场后缀，避免误伤 6 位 A 股代码
+                if parts[-1].upper() in {"SH", "SZ", "BJ", "HK", "US", "SS"}:
+                    bare = parts[0]
+                    break
+        name = STOCK_MAPPING.get(bare, "") or STOCK_MAPPING.get(code, "")
         if not name:
             for s in HOT_STOCKS:
-                if s["代码"] == code:
+                if s["代码"] == bare or s["代码"] == code:
                     name = s["名称"]
                     break
         return name or code
@@ -1071,12 +1081,23 @@ def optimize_backtest(code: str, strategy: str = "ma_cross",
         return {"error": "参数优化失败: 所有组合均无有效结果"}
 
     # ── 4. 过拟合检测 ──
+    # BUG-13 修复: 原来 (max(nv)-min(nv))/best_val 当 best_val 为负数(如优化 mdd)时，
+    # 除以负数会让"波动大"反而得到小正值，漏报过拟合。改用绝对值分母 + 绝对值波动。
     nearby = [x for x in results_list if abs(x["fast"] - best["fast"]) <= 5 and abs(x["slow"] - best["slow"]) <= 10 and x != best]
     warning = ""
     if nearby:
         nv = [x["metric_value"] for x in nearby]
-        if best_val != 0 and abs((max(nv) - min(nv)) / best_val) > 0.5:
+        spread = abs(max(nv) - min(nv))
+        denom = abs(best_val)
+        if denom > 1e-8 and spread / denom > 0.5:
             warning = "最优参数附近结果波动较大,可能存在过拟合,建议样本外验证"
+    # BUG-14 修复: 提示字段改为可读的 if/elif 结构，替代嵌套三元表达式
+    if not tasks:
+        tip = ""
+    elif completed_count < len(tasks):
+        tip = "参数搜索未完全完成，已超时 (120s)"
+    else:
+        tip = "参数搜索全部完成"
     return {"策略": _STRATEGY_LABELS.get(strategy, strategy), "股票": _get_stock_name(code),
             # BUG-14 修复: 使用实际有效组合数而非笛卡尔积总数
             "优化目标": metric, "测试组合数": valid_task_count,
@@ -1086,8 +1107,8 @@ def optimize_backtest(code: str, strategy: str = "ma_cross",
             "最优表现": {k: v for k, v in best.items() if k not in ("fast", "slow", "metric_value")},
             "所有结果": sorted(results_list, key=lambda x: x["metric_value"], reverse=True)[:20],
             "过拟合警告": warning or "无",
-            "提示": ("参数搜索未完全完成，已超时 (120s)" if completed_count < len(tasks)
-                     else "参数搜索全部完成") if tasks else ""}
+            "提示": tip,
+        }
 
 # ============================================================================
 
@@ -1103,6 +1124,7 @@ def optimize_backtest_bayesian(
     metric: str = "sharpe",
     n_trials: int = 50,
     initial_capital: float = 100000.0,
+    klines: list | None = None,
 ) -> dict[str, Any]:
     """Optuna TPE 贝叶斯参数优化 — 智能探索参数空间
 
@@ -1120,6 +1142,7 @@ def optimize_backtest_bayesian(
         start_date/end_date: 回测区间
         metric: 优化目标
         n_trials: 试验次数 (默认 50，建议 30-100)
+        klines: 预取的 K 线数据（Walk-Forward 等场景复用，避免重复网络 IO）
     """
     try:
         import optuna
@@ -1128,20 +1151,22 @@ def optimize_backtest_bayesian(
     except ImportError:
         return {"error": "Optuna 未安装，请执行: pip install optuna"}
 
-    # 预取K线数据
-    try:
-        pre_fetched_klines = _get_kline_for_code(code, period="daily", adjust="qfq", limit=400)
-        if pre_fetched_klines and isinstance(pre_fetched_klines[0], dict) and "error" in pre_fetched_klines[0]:
-            return {"error": pre_fetched_klines[0]["error"]}
-        if not pre_fetched_klines:
-            return {"error": f"获取{code} K线数据失败"}
-    except Exception as e:
-        return {"error": f"获取K线数据异常: {e}"}
+    # 预取K线数据（若调用方未提供则现场拉取）
+    if klines is None:
+        try:
+            klines = _get_kline_for_code(code, period="daily", adjust="qfq", limit=400)
+            if klines and isinstance(klines[0], dict) and "error" in klines[0]:
+                return {"error": klines[0]["error"]}
+            if not klines:
+                return {"error": f"获取{code} K线数据失败"}
+        except Exception as e:
+            return {"error": f"获取K线数据异常: {e}"}
 
     # 指标方向: 需要最大化的目标
+    # BUG-C3 修复: 原来对 mdd 设 minimize，但 _extract_metric 返回 -abs(mdd)（负值），
+    # minimize 负值会选更负=更大回撤，与"最小化回撤"完全相反。
+    # 正确: mdd 用 maximize（选最不负 = 最小回撤）。所有指标统一 maximize。
     metric_direction = "maximize"
-    if metric == "mdd":
-        metric_direction = "minimize"
 
     best_result = None
     trial_results: list[dict] = []
@@ -1163,7 +1188,7 @@ def optimize_backtest_bayesian(
                 code=code, strategy=strategy,
                 fast_period=fast, slow_period=slow,
                 start_date=start_date, end_date=end_date,
-                benchmark_code=None, klines=pre_fetched_klines,
+                benchmark_code=None, klines=klines,
                 slippage_type="fixed_perc", slippage_value=0.001,
                 initial_capital=initial_capital,
             )
@@ -1339,7 +1364,19 @@ def walk_forward_analysis(
         window_start += step_delta
 
     if len(windows) < 3:
-        return {"error": f"窗口数量不足 ({len(windows)})，需要至少 3 个窗口。请扩大数据范围或缩短训练/测试周期"}
+        # BUG-18 修复: 友好报错，告知用户具体需要多少数据及如何调整
+        train_days_needed = int(train_years * 365)
+        test_days_needed = int(test_months * 30)
+        min_total_days = train_days_needed + test_days_needed + (3 - 1) * int(step_months * 30)
+        return {
+            "error": (
+                f"窗口数量不足 ({len(windows)})，需要至少 3 个窗口。"
+                f"当前数据 {len(dates)} 条交易日（约 {len(dates)//12} 个月）。"
+                f"当前配置: 训练 {train_years} 年 + 测试 {test_months} 月 + 步长 {step_months} 月，"
+                f"至少需要约 {min_total_days} 个自然日（{min_total_days//30} 个月）的数据。"
+                f"建议: ① 扩大 K 线数据范围（增加 limit）② 缩短训练年数 ③ 缩短测试月数"
+            )
+        }
 
     # 逐窗口 Walk-Forward
     window_results = []
@@ -1357,6 +1394,8 @@ def walk_forward_analysis(
                 slow_min=slow_min, slow_max=slow_max,
                 start_date=win["train_start"], end_date=win["train_end"],
                 metric=metric, n_trials=n_trials,
+                # 复用已预取的 K 线，避免每个窗口重新发起网络请求（性能优化）
+                klines=klines,
             )
         except Exception:
             continue
@@ -1461,7 +1500,7 @@ def walk_forward_analysis(
 
 
 # ============================================================================
-# 蒙特卡洛稳健性检验 — 交易重排 + 置信区间
+# 蒙特卡洛稳健性检验 — Bootstrap 日收益率重采样 + 置信区间
 # ============================================================================
 
 def monte_carlo_test(
@@ -1567,12 +1606,24 @@ def monte_carlo_test(
     # 正收益概率
     prob_positive = float(np.mean(sim_returns > 0)) * 100
 
-    # 原始策略在分布中的位置 (百分位)
-    from scipy import stats as scipy_stats
+    # 原始策略在分布中的位置 (百分位) — scipy 为可选依赖，缺失时用 numpy 近似
+    original_percentile = 50.0
     try:
+        from scipy import stats as scipy_stats
         original_percentile = float(scipy_stats.percentileofscore(sim_returns, original_return))
+    except ImportError:
+        # scipy 未安装: 用 numpy 百分位反查 (结果略有差异但足够)
+        original_percentile = float(np.interp(
+            original_return,
+            np.sort(sim_returns),
+            np.linspace(0, 100, len(sim_returns)),
+        ))
     except Exception:
         original_percentile = 50.0
+
+    # 直方图分箱（20 箱）— 供前端绘制分布图，避免传输 1000 个原始样本
+    ret_counts, ret_bins = np.histogram(sim_returns, bins=20)
+    dd_counts, dd_bins = np.histogram(sim_drawdowns, bins=20)
 
     # 判断
     if prob_positive >= 80 and original_percentile >= 50:
@@ -1602,12 +1653,28 @@ def monte_carlo_test(
             "75分位(%)": round(ret_75p, 2),
             "95分位(%)": round(ret_95p, 2),
         },
+        "收益率直方图": {
+            "bins": [round(float(b), 2) for b in ret_bins],
+            "counts": [int(c) for c in ret_counts],
+            "原始位置": round(original_return, 2),
+            "5分位": round(ret_5p, 2),
+            "中位数": round(ret_50p, 2),
+            "95分位": round(ret_95p, 2),
+        },
         "最大回撤分布": {
             # BUG-2 修复: dd 是负数，5th分位=最负=最差回撤，95th分位=最不负=最优回撤
             # 原来标签完全颠倒了
             "中位数(%)": round(dd_50p, 2),
             "最优5%(%)": round(dd_95p, 2),   # 95th分位 = 最小回撤（最不负）
             "最差5%(%)": round(dd_5p, 2),     # 5th分位 = 最大回撤（最负）
+        },
+        "回撤直方图": {
+            "bins": [round(float(b), 2) for b in dd_bins],
+            "counts": [int(c) for c in dd_counts],
+            "原始位置": round(original_dd, 2),
+            "5分位": round(dd_5p, 2),
+            "中位数": round(dd_50p, 2),
+            "95分位": round(dd_95p, 2),
         },
         "正收益概率(%)": round(prob_positive, 1),
         "原始策略百分位": round(original_percentile, 1),
@@ -1648,7 +1715,7 @@ def handle_backtest(arguments: dict[str, Any]) -> dict[str, Any]:
             chart_path = generate_backtest_chart(stock_name=result["股票"], strategy_label=result["策略"],
                 strategy_curve=result["权益曲线"],
                 benchmark_curve=result.get("基准(买入持有)", {}).get("权益曲线"),
-                trades=result.get("交易记录", []), initial_capital=initial_capital)
+                )
             result["权益曲线图"] = chart_path
             result["权益曲线图提示"] = "交互式HTML文件,请用浏览器打开"
         except Exception as e: result["权益曲线图"] = f"图表生成失败: {e}"

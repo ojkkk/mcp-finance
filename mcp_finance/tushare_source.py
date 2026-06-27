@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import time
 import logging
+import threading
 from typing import Any
 from functools import lru_cache
 
@@ -22,22 +23,31 @@ _log = logging.getLogger("tushare")
 # ── 全局 tushare 客户端 ──
 _ts_client = None
 _ts_available = None  # None=未检测, True=可用, False=不可用
+# BUG-M5 修复: 加锁保护并发初始化，避免重复 set_token 或创建多个客户端
+_ts_init_lock = threading.Lock()
 
 
 def get_ts():
-    """获取 tushare pro 客户端（懒加载 + 环境变量）"""
+    """获取 tushare pro 客户端（懒加载 + 环境变量 + 线程安全）"""
     global _ts_client, _ts_available
-    
+
     if _ts_available is False:
         return None
     if _ts_client is not None:
         return _ts_client
-    
-    token = os.environ.get("TUSHARE_TOKEN", "").strip()
-    if not token:
-        _log.info("TUSHARE_TOKEN 未设置，Tushare 不可用。注册地址: https://tushare.pro")
-        _ts_available = False
-        return None
+
+    with _ts_init_lock:
+        # 双重检查，避免锁内重复初始化
+        if _ts_available is False:
+            return None
+        if _ts_client is not None:
+            return _ts_client
+
+        token = os.environ.get("TUSHARE_TOKEN", "").strip()
+        if not token:
+            _log.info("TUSHARE_TOKEN 未设置，Tushare 不可用。注册地址: https://tushare.pro")
+            _ts_available = False
+            return None
     
     try:
         import tushare as ts
@@ -116,12 +126,23 @@ def get_realtime_quote(ts_code: str) -> dict | None:
 # 股票基础信息
 # ═══════════════════════════════════════════════════════════════
 
-@lru_cache(maxsize=1)
+# BUG-L3 修复: 原 @lru_cache(maxsize=1) 永久缓存，新上市公司不会被感知
+# 改为带 TTL 的缓存（6 小时刷新一次）
+_stock_basic_cache: list[dict] = []
+_stock_basic_cache_ts: float = 0.0
+_stock_basic_ttl = 6 * 3600  # 6 小时
+
 def get_stock_basic() -> list[dict]:
-    """获取全市场A股基础信息列表（缓存）"""
+    """获取全市场A股基础信息列表（6小时 TTL 缓存）"""
+    global _stock_basic_cache, _stock_basic_cache_ts
+    import time as _time
+    now = _time.time()
+    if _stock_basic_cache and (now - _stock_basic_cache_ts) < _stock_basic_ttl:
+        return _stock_basic_cache
+
     ts = get_ts()
     if not ts:
-        return []
+        return _stock_basic_cache  # 返回旧缓存而非空列表，避免短暂网络问题清空数据
     
     try:
         dfs = []
@@ -135,8 +156,8 @@ def get_stock_basic() -> list[dict]:
                 continue
         
         if not dfs:
-            return []
-        
+            return _stock_basic_cache  # 返回旧缓存
+
         import pandas as pd
         df_all = pd.concat(dfs, ignore_index=True)
         records = []
@@ -150,10 +171,13 @@ def get_stock_basic() -> list[dict]:
                 "上市日期": str(row.get("list_date", "")),
             })
         _log.info(f"Tushare stock_basic: {len(records)} 只")
+        # 更新缓存
+        _stock_basic_cache = records
+        _stock_basic_cache_ts = now
         return records
     except Exception as e:
         _log.warning(f"Tushare stock_basic: {e}")
-        return []
+        return _stock_basic_cache
 
 
 def code_to_tscode(code: str) -> str:

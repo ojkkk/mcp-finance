@@ -19,10 +19,10 @@ foreach ($pid in $pids | Select-Object -Unique) {
     Write-Host "  已终止 PID $pid (端口 $port)" -ForegroundColor Gray
 }
 
-# 杀掉残留的 python fastapi dashboard 进程
+# 杀掉残留的 python dashboard 进程（Flask / 旧 FastAPI）
 Get-Process python -ErrorAction SilentlyContinue | ForEach-Object {
     $cmd = (Get-WmiObject Win32_Process -Filter "ProcessId=$($_.Id)").CommandLine
-    if ($cmd -match "fastapi_server") {
+    if ($cmd -match "dashboard\.(app|fastapi_server|server)") {
         Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
         Write-Host "  已终止残留 dashboard 进程 PID $($_.Id)" -ForegroundColor Gray
     }
@@ -31,13 +31,13 @@ Get-Process python -ErrorAction SilentlyContinue | ForEach-Object {
 Start-Sleep -Seconds 1
 
 # 2. 启动服务
-Write-Host "[2/2] 启动服务..." -ForegroundColor Yellow
+Write-Host "[2/2] 启动 Flask 服务..." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  访问地址: http://localhost:$port" -ForegroundColor Green
 Write-Host "  按 Ctrl+C 停止" -ForegroundColor Gray
 Write-Host ""
 
 Set-Location "D:\new idea\Mcp\mcp-stock-cn"
-python -m mcp_finance.dashboard.fastapi_server
+python -m mcp_finance.dashboard.app
 
 Read-Host "`n按 Enter 退出"

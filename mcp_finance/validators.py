@@ -116,6 +116,10 @@ class ScreenerParams(BaseModel):
     min_pb: Optional[float] = Field(default=None, ge=0)
     max_pb: Optional[float] = Field(default=None, ge=0)
     min_roe: Optional[float] = Field(default=None, ge=-100, le=100, description="最低净资产收益率 ROE(%) — 通过财务缓存获取")
+    # BUG-H4 修复: 补充 screen_stocks 签名中存在但模型缺失的 3 个字段
+    min_gross_margin: Optional[float] = Field(default=None, ge=-100, le=100, description="最低毛利率(%)")
+    min_net_margin: Optional[float] = Field(default=None, ge=-100, le=100, description="最低净利率(%)")
+    min_revenue_growth: Optional[float] = Field(default=None, ge=-100, le=1000, description="最低营收增长率(%)")
     top_n: int = Field(default=50, ge=1, le=200)
 
 
@@ -167,14 +171,24 @@ class OptimizeParams(StockCodeModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     metric: str = Field(default="sharpe")
-    optimization_method: str = Field(default="grid", description="优化方法")
+    # BUG-H3 修复: metric 枚举与后端 _extract_metric 对齐，补充 sortino/calmar
+    optimization_method: str = Field(default="bayesian", description="优化方法: bayesian/grid")
     n_trials: int = Field(default=50, ge=10, le=200)
+    # BUG-H2 修复: 补充 initial_capital 字段，否则用户传入会被静默丢弃
+    initial_capital: float = Field(default=100000.0, gt=0)
 
     @field_validator("metric")
     @classmethod
     def validate_metric(cls, v: str) -> str:
-        if v not in {"sharpe", "return", "mdd", "win_rate"}:
-            raise ValueError("metric 必须是 sharpe/return/mdd/win_rate")
+        if v not in {"sharpe", "return", "mdd", "win_rate", "sortino", "calmar"}:
+            raise ValueError("metric 必须是 sharpe/return/mdd/win_rate/sortino/calmar")
+        return v
+
+    @field_validator("optimization_method")
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        if v not in {"bayesian", "grid"}:
+            raise ValueError("optimization_method 必须是 bayesian 或 grid")
         return v
 
     @field_validator("strategy")
@@ -183,6 +197,15 @@ class OptimizeParams(StockCodeModel):
         if v not in {"ma_cross", "macd_signal", "rsi_signal", "kdj_signal", "boll_signal", "turtle", "vol_trend", "mean_rev", "custom"}:
             raise ValueError("strategy 必须是 ma_cross/macd_signal/rsi_signal/kdj_signal/boll_signal/turtle/vol_trend/mean_rev/custom")
         return v
+
+    @model_validator(mode="after")
+    def validate_ranges(self):
+        # BUG-L4 修复: 补充 fast_max > fast_min / slow_max > slow_min 校验
+        if self.fast_max <= self.fast_min:
+            raise ValueError(f"fast_max({self.fast_max}) 必须大于 fast_min({self.fast_min})")
+        if self.slow_max <= self.slow_min:
+            raise ValueError(f"slow_max({self.slow_max}) 必须大于 slow_min({self.slow_min})")
+        return self
 
 
 class PlotKlineParams(StockCodeModel):
@@ -413,6 +436,10 @@ class WalkForwardParams(BaseModel):
     slow_max: int = Field(default=120, ge=5, le=500, description="慢线参数最大值")
     metric: str = Field(default="sharpe", description="优化目标")
     n_trials: int = Field(default=30, ge=5, le=100, description="每窗口贝叶斯优化次数")
+    # BUG-H2 修复: 补充 initial_capital，否则用户传入会被静默丢弃
+    initial_capital: float = Field(default=100000.0, gt=0, description="初始资金")
+    start_date: Optional[str] = Field(default=None, description="开始日期 YYYY-MM-DD")
+    end_date: Optional[str] = Field(default=None, description="结束日期 YYYY-MM-DD")
 
     @field_validator("code")
     @classmethod
@@ -450,6 +477,8 @@ class MonteCarloParams(BaseModel):
     start_date: Optional[str] = Field(default=None, description="开始日期 YYYY-MM-DD")
     end_date: Optional[str] = Field(default=None, description="结束日期 YYYY-MM-DD")
     n_simulations: int = Field(default=1000, ge=100, le=10000, description="模拟次数")
+    # BUG-H2 修复: 补充 initial_capital，否则用户传入会被静默丢弃
+    initial_capital: float = Field(default=100000.0, gt=0, description="初始资金")
 
     @field_validator("code")
     @classmethod

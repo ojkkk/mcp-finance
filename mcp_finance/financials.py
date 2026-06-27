@@ -86,7 +86,7 @@ def get_financial_indicators(code: str) -> dict[str, Any]:
 
 def _fetch_from_akshare(code: str) -> dict[str, Any]:
     """从 AKShare 东方财富拉取单只股票的核心财务指标（带超时保护）"""
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+    # M4 修复: 不再在此函数内新建 ThreadPoolExecutor，改由调用处复用共享线程池
 
     def _do_fetch() -> dict[str, Any]:
         result: dict[str, Any] = {"_ts": time.time()}
@@ -129,31 +129,38 @@ def _fetch_from_akshare(code: str) -> dict[str, Any]:
 
         return result
 
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_do_fetch)
-        try:
-            return future.result(timeout=30)
-        except FuturesTimeoutError:
-            future.cancel()
-            result: dict[str, Any] = {"_ts": time.time(), "_error": "timeout"}
-            for alias in _ALIAS_MAP:
-                result[alias] = None
-            return result
+    # M4 修复: 原来每次调用新建 ThreadPoolExecutor(max_workers=1)，频繁创建/销毁线程
+    # 改用 api 模块的共享线程池 _API_EXECUTOR，避免线程泄漏
+    from mcp_finance.api import _API_EXECUTOR
+    from concurrent.futures import TimeoutError as FuturesTimeoutError
+    future = _API_EXECUTOR.submit(_do_fetch)
+    try:
+        return future.result(timeout=30)
+    except FuturesTimeoutError:
+        future.cancel()
+        result: dict[str, Any] = {"_ts": time.time(), "_error": "timeout"}
+        for alias in _ALIAS_MAP:
+            result[alias] = None
+        return result
 
 
 def preload_financials(codes: list[str], max_workers: int = 4) -> dict[str, dict]:
-    """批量预热缓存（后台任务用，多线程并行）"""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    """批量预热缓存（后台任务用，多线程并行）
+
+    M4 修复: 复用 api 模块共享线程池 _API_EXECUTOR，避免每次新建 ThreadPoolExecutor
+    """
+    from concurrent.futures import as_completed
+    from mcp_finance.api import _API_EXECUTOR
+    from concurrent.futures import TimeoutError as FuturesTimeoutError
 
     results: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(get_financial_indicators, c): c for c in codes}
-        for future in as_completed(futures):
-            code = futures[future]
-            try:
-                results[code] = future.result(timeout=60)
-            except Exception:
-                results[code] = {"roe": None}
+    futures = {_API_EXECUTOR.submit(get_financial_indicators, c): c for c in codes}
+    for future in as_completed(futures):
+        code = futures[future]
+        try:
+            results[code] = future.result(timeout=60)
+        except Exception:
+            results[code] = {"roe": None}
     return results
 
 

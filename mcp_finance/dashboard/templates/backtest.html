@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>mcp-finance · 策略回测</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <link rel="stylesheet" href="/static/common.css">
 <style>
 .tabs{display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--bd)}
@@ -78,17 +78,20 @@
 
 <!-- Tab 3: Walk-Forward -->
 <div id="tab-walkforward" class="tab-content">
-<div class="card g24"><div class="card-header"><div class="ib ib-i">🔬</div><h2>Walk-Forward 样本外验证</h2></div>
+<div class="card g24"><div class="card-header"><div class="ib ib-i">🔬</div><h2>Walk-Forward 样本外验证</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">滚动窗口 IS/OOS 对比 · 过拟合检测</span></div>
 <div class="form-grid-bt g16">
 <div><div class="fl">股票代码</div><input id="wc" class="input" type="text" value="600519"></div>
-<div><div class="fl">策略</div><select id="ws" class="input"><option value="ma_cross">双均线</option><option value="macd_signal">MACD</option><option value="rsi_signal">RSI</option><option value="kdj_signal">KDJ</option></select></div>
+<div><div class="fl">策略</div><select id="ws" class="input"><option value="ma_cross">双均线</option><option value="macd_signal">MACD</option><option value="rsi_signal">RSI</option><option value="kdj_signal">KDJ</option><option value="boll_signal">BOLL</option><option value="turtle">海龟</option><option value="vol_trend">波动率趋势</option><option value="mean_rev">均值回归</option></select></div>
+<div><div class="fl">优化目标</div><select id="wme" class="input"><option value="sharpe">夏普比率</option><option value="return">总收益率</option><option value="mdd">最大回撤(最小)</option><option value="sortino">索提诺</option><option value="calmar">卡玛</option></select></div>
 <div><div class="fl">训练年数</div><input id="wty" class="input" type="number" value="1.5" min="0.5" max="5" step="0.5"></div>
 <div><div class="fl">测试月数</div><input id="wtm" class="input" type="number" value="4" min="1" max="24"></div>
 <div><div class="fl">步长月数</div><input id="wsm" class="input" type="number" value="4" min="1" max="12"></div>
+<div><div class="fl">快线范围</div><div style="display:flex;gap:6px;align-items:center"><input id="wfmin" class="input" type="number" value="3" min="2" max="100" style="min-width:0"><span style="color:var(--mu-fg)">~</span><input id="wfmax" class="input" type="number" value="40" min="5" max="200" style="min-width:0"></div></div>
+<div><div class="fl">慢线范围</div><div style="display:flex;gap:6px;align-items:center"><input id="wsmin" class="input" type="number" value="10" min="5" max="200" style="min-width:0"><span style="color:var(--mu-fg)">~</span><input id="wsmax" class="input" type="number" value="120" min="10" max="300" style="min-width:0"></div></div>
 <div><div class="fl">试验次数/窗口</div><input id="wtr" class="input" type="number" value="20" min="10" max="100"></div>
 </div>
 <button id="wbtn" class="btn btn-p" onclick="runWalkForward()">🔬 开始分析</button></div>
-<div id="wl" style="display:none" class="card g24"><div style="text-align:center;padding:32px 0;color:var(--mu-fg);font-size:14px"><span class="spin" style="vertical-align:middle;margin-right:10px"></span>Walk-Forward 分析中（约 30-60s）…</div></div>
+<div id="wl" style="display:none" class="card g24"><div style="text-align:center;padding:32px 0;color:var(--mu-fg);font-size:14px"><span class="spin" style="vertical-align:middle;margin-right:10px"></span>Walk-Forward 分析中（多窗口贝叶斯优化，约 30-90s）…</div></div>
 <div id="wr" style="display:none"></div>
 </div>
 
@@ -135,8 +138,8 @@ var m=[{l:"累计收益率",k:"总收益率(%)",f:"pct"},{l:"年化收益率",k:
 document.getElementById("bst").innerHTML=m.map(function(x){var v=d[x.k],vl="--",cl="";if(v!=null){if(x.f==="pct"){vl=(v>=0?"+":"")+fm(v,2)+"%";cl=v>=0?"var(--up)":"var(--dn)"}else if(x.f==="money"){vl="¥"+fv(v);cl="var(--pri)"}else if(x.f==="int"){vl=parseInt(v)}else{vl=fm(v,3)}if(x.k==="最大回撤(%)")cl="var(--dn)"}return'<div class="si"><div class="si-l">'+x.l+'</div><div class="si-v" style="color:'+cl+'">'+vl+'</div></div>'}).join("");
 var eq=d["权益曲线"]||d["策略权益曲线"]||[],bm=d["基准(买入持有)"]||{},bmEq=bm["权益曲线"]||[];
 if(eq.length>0){var tr=[{x:eq.map(function(e){return e["日期"]||""}),y:eq.map(function(e){return e["市值"]||e["value"]||0}),type:"scatter",mode:"lines",name:"策略",line:{color:"#4F46E5",width:3},fill:"tozeroy",fillcolor:"rgba(79,70,229,0.05)",hovertemplate:"%{x}<br>¥%{y:,.0f}<extra></extra>"}];if(Array.isArray(bmEq)&&bmEq.length>0)tr.push({x:bmEq.map(function(e){return e["日期"]||""}),y:bmEq.map(function(e){return e["市值"]||e["value"]||0}),type:"scatter",mode:"lines",name:"买入持有",line:{color:"#94A3B8",width:2,dash:"dot"},hovertemplate:"%{x}<br>¥%{y:,.0f}<extra></extra>"});
-var bchEl=document.getElementById("bch");bchEl.style.display="";bchEl.innerHTML="";
-Plotly.newPlot("bch",tr,{margin:{l:75,r:25,t:10,b:50},paper_bgcolor:"#fff",plot_bgcolor:"#F8FAFC",autosize:true,xaxis:{color:"#94A3B8",gridcolor:"#E2E8F0",tickformat:"%m/%d",zeroline:false},yaxis:{color:"#94A3B8",gridcolor:"#E2E8F0",tickformat:",.0f",zeroline:false},legend:{x:0.01,y:0.99,font:{color:"#64748B",size:12},bgcolor:"rgba(255,255,255,0.9)",bordercolor:"#E2E8F0",borderwidth:1}},{responsive:true,displayModeBar:false})}else{document.getElementById("bch").innerHTML='<div class="emp">暂无权益曲线数据</div>'}
+var bchEl=document.getElementById("bch");bchEl.style.display="";var oldEC=echarts.getInstanceByDom(bchEl);if(oldEC)oldEC.dispose();
+setTimeout(function(){var c=echarts.init(document.getElementById("bch"));var ecSeries=tr.map(function(t){var s={name:t.name,type:"line",data:t.y.map(function(v,i){return{value:v}}),symbol:"none",lineStyle:{color:t.line&&t.line.color||"#4F46E5",width:t.line&&t.line.width||2}};if(t.line&&t.line.dash)s.lineStyle.type="dashed";if(t.fill==="tozeroy")s.areaStyle={color:{type:"linear",x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:"rgba(79,70,229,0.2)"},{offset:1,color:"rgba(79,70,229,0.02)"}]}};return s});c.setOption({grid:{left:75,right:25,top:10,bottom:50},xAxis:{type:"category",data:tr[0].x,axisLabel:{color:"#94A3B8"},axisLine:{lineStyle:{color:"#E2E8F0"}}},yAxis:{type:"value",axisLabel:{color:"#94A3B8"},splitLine:{lineStyle:{color:"#E2E8F0"}}},series:ecSeries,tooltip:{trigger:"axis"},legend:{data:tr.map(function(t){return t.name}),top:5,textStyle:{fontSize:11}}});window.addEventListener("resize",function(){c.resize()});setTimeout(function(){c.resize()},300)},100)}else{document.getElementById("bch").innerHTML='<div class="emp">暂无权益曲线数据</div>'}
 var ts=d["交易记录"]||[];
 document.getElementById("btr").innerHTML=ts.length?ts.map(function(t){var dt=t["日期"]||"",act=(t["动作"]||t["买卖"]||""),pr=t["价格"],qty=t["股数"]||t["数量"],amt=t["金额"],pnl=t["盈亏"]||t["盈亏(元)"];var isBuy=act.indexOf("买")>=0;return'<tr><td class="cm">'+dt+'</td><td class="c" style="font-weight:700;color:'+(isBuy?"var(--up)":"var(--dn)")+'">'+act+'</td><td class="r" style="font-weight:500">'+fm(pr,2)+'</td><td class="mu">'+fm(qty,0)+'</td><td class="mu">¥'+fv(amt)+'</td><td class="r" style="font-weight:700;color:'+(pnl!=null?(pnl>=0?"var(--up)":"var(--dn)"):"var(--mu-fg)")+'">'+(pnl!=null?(pnl>=0?"+":"")+fv(pnl):"--")+'</td></tr>'}).join(""):'<tr><td colspan="6"><div class="emp">'+(eq.length?"无交易记录":"数据不足")+'</div></td></tr>';
 var s=d["解读"]||"";if(s){document.getElementById("bsm").innerHTML=s.replace(/\n/g,"<br>");document.getElementById("bsb").style.display=""}else{document.getElementById("bsb").style.display="none"}
@@ -176,7 +179,7 @@ html+='</div></div>';
 
 if(conv.length>20){
 html+='<div class="card g24"><div class="card-header"><h2>收敛曲线</h2></div><div style="width:100%;height:300px" id="oconv"></div></div>';
-setTimeout(function(){Plotly.newPlot("oconv",[{y:conv,type:"scatter",mode:"lines",name:"最优值",line:{color:"#4F46E5",width:2}}],{margin:{l:50,r:20,t:10,b:40},xaxis:{title:"试验次数",color:"#94A3B8"},yaxis:{title:"指标值",color:"#94A3B8"}},{responsive:true,displayModeBar:false})},200)}
+setTimeout(function(){var c=echarts.init(document.getElementById("oconv"));var opt={grid:{left:50,right:20,top:10,bottom:40},xAxis:{type:"category",name:"试验次数"},yAxis:{type:"value",name:"目标值"},series:[{name:"最优值",type:"line",data:conv,lineStyle:{color:"#4F46E5",width:2},smooth:true,symbol:"none"}],tooltip:{trigger:"axis"}};c.setOption(opt);window.addEventListener("resize",function(){c.resize()});setTimeout(function(){c.resize()},300)},200)}
 
 var results=d["所有结果"]||[];
 if(results.length){
@@ -190,31 +193,98 @@ document.getElementById("or").innerHTML=html;document.getElementById("or").style
 async function runWalkForward(){
 var b=document.getElementById("wbtn");b.innerHTML='<span class="spin" style="width:16px;height:16px;border-width:2px;margin:0"></span> 分析中…';b.disabled=true;
 document.getElementById("wl").style.display="";document.getElementById("wr").style.display="none";
-try{var p={code:document.getElementById("wc").value.trim()||"600519",strategy:document.getElementById("ws").value,train_years:parseFloat(document.getElementById("wty").value)||1.5,test_months:parseInt(document.getElementById("wtm").value)||4,step_months:parseInt(document.getElementById("wsm").value)||4,n_trials:parseInt(document.getElementById("wtr").value)||20,initial_capital:parseFloat(document.getElementById("bcp").value)||200000};
+try{var p={code:document.getElementById("wc").value.trim()||"600519",strategy:document.getElementById("ws").value,metric:document.getElementById("wme").value,train_years:parseFloat(document.getElementById("wty").value)||1.5,test_months:parseInt(document.getElementById("wtm").value)||4,step_months:parseInt(document.getElementById("wsm").value)||4,fast_min:parseInt(document.getElementById("wfmin").value)||3,fast_max:parseInt(document.getElementById("wfmax").value)||40,slow_min:parseInt(document.getElementById("wsmin").value)||10,slow_max:parseInt(document.getElementById("wsmax").value)||120,n_trials:parseInt(document.getElementById("wtr").value)||20,initial_capital:parseFloat(document.getElementById("bcp").value)||200000};
 var r=await fetch("/api/walk_forward",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(p)});var d=await r.json();document.getElementById("wl").style.display="none";
 if(d.error){showWError((typeof d.error==="string"?d.error:"")||d.message||"Unknown")}else{renderWFResult(d)}}catch(e){document.getElementById("wl").style.display="none";showWError(e.message)}b.innerHTML="🔬 开始分析";b.disabled=false}
 function showWError(m){document.getElementById("wr").style.display="";document.getElementById("wr").innerHTML='<div class="card g24"><div class="err">'+m+'</div></div>'}
 function renderWFResult(d){
 var sum=d["汇总"]||{},wins=d["窗口明细"]||[],params=d["参数历史"]||[];
-var html='<div class="card g24"><div class="card-header"><div class="ib ib-v">🔬</div><h2>Walk-Forward 结果</h2></div>';
+// 计算 OOS 夏普均值用于汇总卡片
+var oosSharpeArr=wins.map(function(w){return w["OOS夏普"]||0}).filter(function(v){return !isNaN(v)});
+var avgOosSharpe=oosSharpeArr.length?oosSharpeArr.reduce(function(a,b){return a+b},0)/oosSharpeArr.length:0;
+var html='<div class="card g24"><div class="card-header"><div class="ib ib-v">🔬</div><h2>Walk-Forward 结果</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">'+(d["窗口配置"]||"")+'</span></div>';
 html+='<div class="fg g24">';
-html+='<div class="si"><div class="si-l">窗口数</div><div class="si-v">'+(d["有效窗口"]||0)+"/"+(d["窗口总数"]||0)+'</div></div>';
-html+='<div class="si"><div class="si-l">平均IS收益</div><div class="si-v" style="color:'+(sum["平均样本内收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(sum["平均样本内收益率(%)"],2)+'%</div></div>';
-html+='<div class="si"><div class="si-l">平均OOS收益</div><div class="si-v" style="color:'+(sum["平均样本外收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(sum["平均样本外收益率(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">有效窗口</div><div class="si-v">'+(d["有效窗口"]||0)+'<span style="font-size:13px;color:var(--mu-fg)">/'+(d["窗口总数"]||0)+'</span></div></div>';
+html+='<div class="si"><div class="si-l">平均IS收益</div><div class="si-v" style="color:'+(sum["平均样本内收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+(sum["平均样本内收益率(%)"]>=0?"+":"")+fm(sum["平均样本内收益率(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">平均OOS收益</div><div class="si-v" style="color:'+(sum["平均样本外收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+(sum["平均样本外收益率(%)"]>=0?"+":"")+fm(sum["平均样本外收益率(%)"],2)+'%</div></div>';
 html+='<div class="si"><div class="si-l">OOS胜率</div><div class="si-v">'+fm(sum["OOS胜率(%)"],1)+'%</div></div>';
-html+='<div class="si"><div class="si-l">OOS收益率波动</div><div class="si-v">'+fm(sum["OOS收益率标准差"],2)+'%</div></div>';
-html+='<div class="si"><div class="si-l">过拟合比率</div><div class="si-v">'+(sum["过拟合比率(IS/OOS)"]||"--")+'</div></div>';
-html+='<div class="si"><div class="si-l">参数稳定性</div><div class="si-v" style="color:'+(sum["参数稳定性"]==="稳定"?"var(--up)":"var(--dn)")+'">'+sum["参数稳定性"]+'</div></div>';
-html+='<div class="si"><div class="si-l">综合判断</div><div class="si-v" style="font-size:16px;color:var(--pri)"><b>'+sum["综合判断"]+'</b></div></div>';
+html+='<div class="si"><div class="si-l">OOS夏普均值</div><div class="si-v">'+fm(avgOosSharpe,2)+'</div></div>';
+html+='<div class="si"><div class="si-l">OOS收益波动</div><div class="si-v">'+fm(sum["OOS收益率标准差"],2)+'%</div></div>';
+var ofr=sum["过拟合比率(IS/OOS)"];
+var ofrStr=(ofr==null||ofr==="N/A")?"--":(typeof ofr==="number"?fm(ofr,2)+"×":ofr);
+var ofrColor=(typeof ofr==="number"&&Math.abs(ofr)>2)?"var(--dn)":"var(--up)";
+html+='<div class="si"><div class="si-l">过拟合比率</div><div class="si-v" style="color:'+ofrColor+';font-size:16px">'+ofrStr+'</div><div class="si-c" style="color:var(--mu-fg)">IS/OOS &gt;2 提示过拟合</div></div>';
+html+='<div class="si"><div class="si-l">参数稳定性</div><div class="si-v" style="font-size:14px;color:'+(sum["参数稳定性"]==="稳定"?"var(--up)":"var(--dn)")+'">'+sum["参数稳定性"]+'</div></div>';
+html+='<div class="si" style="grid-column:span 2"><div class="si-l">综合判断</div><div class="si-v" style="font-size:15px;color:var(--pri)"><b>'+sum["综合判断"]+'</b></div></div>';
 html+='</div></div>';
 
+// 图表1: IS vs OOS 收益率对比柱状图
+if(wins.length>=2){
+html+='<div class="card g24"><div class="card-header"><div class="ib ib-s">📊</div><h2>IS vs OOS 收益率对比</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">样本内(训练) vs 样本外(测试)</span></div><div style="width:100%;height:380px" id="wfchart1"></div></div>';
+}
+// 图表2: 参数稳定性折线图
+if(params.length>=2){
+html+='<div class="card g24"><div class="card-header"><div class="ib ib-a">📈</div><h2>参数随窗口演化</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">参数波动大 = 过拟合风险</span></div><div style="width:100%;height:320px" id="wfchart2"></div></div>';
+}
+
 if(wins.length){
-html+='<div class="card g24"><div class="card-header"><h2>窗口明细</h2></div><div class="tbl-wrap" style="max-height:400px;overflow-y:auto"><table><thead><tr><th>#</th><th>训练期</th><th>测试期</th><th>参数</th><th class="r">IS收益%</th><th class="r">OOS收益%</th><th class="r">OOS夏普</th></tr></thead><tbody>';
+html+='<div class="card g24"><div class="card-header"><div class="ib ib-e">📋</div><h2>窗口明细</h2></div><div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th>#</th><th>训练期</th><th>测试期</th><th>参数</th><th class="r">IS收益%</th><th class="r">OOS收益%</th><th class="r">OOS夏普</th><th class="r">OOS回撤%</th><th class="r">OOS胜率%</th></tr></thead><tbody>';
 wins.forEach(function(w){
-html+='<tr><td>'+w["窗口"]+'</td><td class="cm">'+w["训练期"]+'</td><td class="cm">'+w["测试期"]+'</td><td>('+w["最优参数"].fast+','+w["最优参数"].slow+')</td><td class="r" style="color:'+(w["样本内收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(w["样本内收益率(%)"],2)+'</td><td class="r" style="font-weight:700;color:'+(w["样本外收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(w["样本外收益率(%)"],2)+'</td><td class="r">'+fm(w["OOS夏普"],2)+'</td></tr>'
+html+='<tr><td>'+w["窗口"]+'</td><td class="cm">'+w["训练期"]+'</td><td class="cm">'+w["测试期"]+'</td><td>('+w["最优参数"].fast+','+w["最优参数"].slow+')</td><td class="r" style="color:'+(w["样本内收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(w["样本内收益率(%)"],2)+'</td><td class="r" style="font-weight:700;color:'+(w["样本外收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(w["样本外收益率(%)"],2)+'</td><td class="r">'+fm(w["OOS夏普"],2)+'</td><td class="r" style="color:var(--dn)">'+fm(w["OOS最大回撤(%)"],2)+'</td><td class="r">'+fm(w["OOS胜率(%)"],1)+'</td></tr>'
 });
 html+='</tbody></table></div></div>'}
-document.getElementById("wr").innerHTML=html;document.getElementById("wr").style.display=""
+if(d["提示"]){html+='<div class="card g24"><div class="sum" style="color:var(--mu-fg);font-size:13px">💡 '+d["提示"]+'</div></div>'}
+document.getElementById("wr").innerHTML=html;document.getElementById("wr").style.display="";
+
+// 渲染图表1: IS vs OOS 对比柱状图
+setTimeout(function(){
+var el1=document.getElementById("wfchart1");
+if(el1){
+var c1=echarts.init(el1);
+var xData=wins.map(function(w){return "#"+w["窗口"]});
+var isData=wins.map(function(w){return w["样本内收益率(%)"]||0});
+var oosData=wins.map(function(w){return w["样本外收益率(%)"]||0});
+c1.setOption({
+grid:{left:55,right:25,top:35,bottom:45},
+legend:{data:["样本内(IS)","样本外(OOS)"],top:5,textStyle:{fontSize:11}},
+tooltip:{trigger:"axis",axisPointer:{type:"shadow"},formatter:function(p){var s=p[0].name+"<br/>";p.forEach(function(it){s+=it.marker+it.seriesName+": "+(it.value>=0?"+":"")+fm(it.value,2)+"%<br/>"});return s}},
+xAxis:{type:"category",data:xData,axisLabel:{color:"#94A3B8"},axisLine:{lineStyle:{color:"#E2E8F0"}}},
+yAxis:{type:"value",name:"收益率%",axisLabel:{color:"#94A3B8",formatter:function(v){return (v>=0?"+":"")+v+"%"}},splitLine:{lineStyle:{color:"#E2E8F0"}},axisLine:{show:false}},
+series:[
+{name:"样本内(IS)",type:"bar",data:isData,itemStyle:{color:"#A78BFA",borderRadius:[3,3,0,0]},barGap:"10%"},
+{name:"样本外(OOS)",type:"bar",data:oosData,itemStyle:{color:"#4F46E5",borderRadius:[3,3,0,0]},
+markLine:{silent:true,symbol:"none",lineStyle:{type:"dashed",color:"#94A3B8"},data:[{yAxis:0,label:{show:false}}]}}
+]});
+window.addEventListener("resize",function(){c1.resize()});
+setTimeout(function(){c1.resize()},300);
+}
+// 渲染图表2: 参数稳定性
+// BUG 修复: 原来用独立的 params 数组，但后端 params_history 在训练成功后就 append，
+// 而 window_results 在测试成功后才 append，两者长度可能不一致导致 x 轴错位。
+// 改为直接从 wins 的"最优参数"字段取，保证与 IS/OOS 图 x 轴完全对齐。
+var el2=document.getElementById("wfchart2");
+if(el2){
+var c2=echarts.init(el2);
+var px=wins.map(function(w){return "#"+w["窗口"]});
+var fastArr=wins.map(function(w){return (w["最优参数"]||{}).fast||0});
+var slowArr=wins.map(function(w){return (w["最优参数"]||{}).slow||0});
+c2.setOption({
+grid:{left:55,right:60,top:35,bottom:45},
+legend:{data:["fast","slow"],top:5,textStyle:{fontSize:11}},
+tooltip:{trigger:"axis"},
+xAxis:{type:"category",data:px,axisLabel:{color:"#94A3B8"},axisLine:{lineStyle:{color:"#E2E8F0"}}},
+yAxis:[
+{type:"value",name:"fast",position:"left",axisLabel:{color:"#A78BFA"},splitLine:{lineStyle:{color:"#E2E8F0"}},axisLine:{show:false}},
+{type:"value",name:"slow",position:"right",axisLabel:{color:"#4F46E5"},splitLine:{show:false},axisLine:{show:false}}
+],
+series:[
+{name:"fast",type:"line",data:fastArr,smooth:true,symbol:"circle",symbolSize:6,lineStyle:{color:"#A78BFA",width:2},itemStyle:{color:"#A78BFA"}},
+{name:"slow",type:"line",yAxisIndex:1,data:slowArr,smooth:true,symbol:"circle",symbolSize:6,lineStyle:{color:"#4F46E5",width:2},itemStyle:{color:"#4F46E5"}}
+]});
+window.addEventListener("resize",function(){c2.resize()});
+setTimeout(function(){c2.resize()},300);
+}
+},200);
 }
 
 // ── Monte Carlo ──
@@ -227,28 +297,102 @@ if(d.error){showMCError((typeof d.error==="string"?d.error:"")||d.message||"Unkn
 function showMCError(m){document.getElementById("mcr").style.display="";document.getElementById("mcr").innerHTML='<div class="card g24"><div class="err">'+m+'</div></div>'}
 function renderMCResult(d){
 var orig=d["原始表现"]||{},dist=d["收益率分布"]||{},ddDist=d["最大回撤分布"]||{};
-var html='<div class="card g24"><div class="card-header"><div class="ib ib-v">🎲</div><h2>蒙特卡洛检验结果</h2></div>';
+var retHist=d["收益率直方图"]||{},ddHist=d["回撤直方图"]||{};
+var html='<div class="card g24"><div class="card-header"><div class="ib ib-v">🎲</div><h2>蒙特卡洛检验结果</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">Bootstrap '+(d["模拟次数"]||0)+' 次</span></div>';
 html+='<div class="fg g24">';
-html+='<div class="si"><div class="si-l">模拟次数</div><div class="si-v">'+(d["模拟次数"]||0)+'</div></div>';
-html+='<div class="si"><div class="si-l">原始收益率</div><div class="si-v" style="color:'+(orig["总收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+fm(orig["总收益率(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">原始收益率</div><div class="si-v" style="color:'+(orig["总收益率(%)"]>=0?"var(--up)":"var(--dn)")+'">'+(orig["总收益率(%)"]>=0?"+":"")+fm(orig["总收益率(%)"],2)+'%</div></div>';
 html+='<div class="si"><div class="si-l">模拟均值</div><div class="si-v">'+fm(dist["均值(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">模拟中位数</div><div class="si-v">'+fm(dist["中位数(%)"],2)+'%</div></div>';
+html+='<div class="si"><div class="si-l">标准差</div><div class="si-v">'+fm(dist["标准差(%)"],2)+'%</div></div>';
 html+='<div class="si"><div class="si-l">95%置信上限</div><div class="si-v" style="color:var(--up)">+'+fm(dist["95分位(%)"],2)+'%</div></div>';
 html+='<div class="si"><div class="si-l">5%置信下限</div><div class="si-v" style="color:var(--dn)">'+fm(dist["5分位(%)"],2)+'%</div></div>';
-html+='<div class="si"><div class="si-l">正收益概率</div><div class="si-v" style="font-size:18px;color:'+(d["正收益概率(%)"]>=60?"var(--up)":"var(--dn)")+'"><b>'+fm(d["正收益概率(%)"],1)+'%</b></div></div>';
-html+='<div class="si"><div class="si-l">原始百分位</div><div class="si-v">'+fm(d["原始策略百分位"],1)+'%</div></div>';
-html+='<div class="si"><div class="si-l">综合判断</div><div class="si-v" style="font-size:15px;color:var(--pri)"><b>'+d["综合判断"]+'</b></div></div>';
+var pp=d["正收益概率(%)"];
+html+='<div class="si"><div class="si-l">正收益概率</div><div class="si-v" style="font-size:18px;color:'+(pp>=80?"var(--up)":pp>=60?"var(--ac-fg)":"var(--dn)")+'"><b>'+fm(pp,1)+'%</b></div><div class="si-c" style="color:var(--mu-fg)">'+(pp>=80?"稳健":pp>=60?"中等":"较弱")+'</div></div>';
+html+='<div class="si"><div class="si-l">原始百分位</div><div class="si-v">'+fm(d["原始策略百分位"],1)+'%</div><div class="si-c" style="color:var(--mu-fg)">在模拟分布中</div></div>';
+html+='<div class="si" style="grid-column:span 2"><div class="si-l">综合判断</div><div class="si-v" style="font-size:14px;color:var(--pri)"><b>'+d["综合判断"]+'</b></div></div>';
 html+='</div></div>';
-// 回撤分布卡片
+
+// 图表1: 收益率分布直方图
+if(retHist.bins&&retHist.counts&&retHist.counts.length>1){
+html+='<div class="card g24"><div class="card-header"><div class="ib ib-s">📊</div><h2>收益率分布</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">竖线: 红=原始 · 橙=5分位 · 绿=95分位</span></div><div style="width:100%;height:340px" id="mcchart1"></div></div>';
+}
+// 图表2: 回撤分布直方图
+if(ddHist.bins&&ddHist.counts&&ddHist.counts.length>1){
+html+='<div class="card g24"><div class="card-header"><div class="ib ib-r">📉</div><h2>最大回撤分布</h2><span style="margin-left:auto;font-size:12px;color:var(--mu-fg)">回撤为负数，越左越差</span></div><div style="width:100%;height:300px" id="mcchart2"></div></div>';
+}
+
+// 回撤统计卡片
 if(Object.keys(ddDist).length){
-html+='<div class="card g24"><div class="card-header"><div class="ib ib-e">📉</div><h2>最大回撤分布</h2></div><div class="fg g24">';
+html+='<div class="card g24"><div class="card-header"><div class="ib ib-e">📋</div><h2>回撤统计</h2></div><div class="fg g24">';
 html+='<div class="si"><div class="si-l">中位数回撤</div><div class="si-v" style="color:var(--dn)">'+fm(ddDist["中位数(%)"],2)+'%</div></div>';
 html+='<div class="si"><div class="si-l">最优5%情景</div><div class="si-v" style="color:var(--up)">'+fm(ddDist["最优5%(%)"],2)+'%</div></div>';
 html+='<div class="si"><div class="si-l">最差5%情景</div><div class="si-v" style="color:var(--dn)"><b>'+fm(ddDist["最差5%(%)"],2)+'%</b></div></div>';
-html+='</div></div>';}
-document.getElementById("mcr").innerHTML=html;document.getElementById("mcr").style.display=""
+html+='</div></div>'}
+if(d["提示"]){html+='<div class="card g24"><div class="sum" style="color:var(--mu-fg);font-size:13px">💡 '+d["提示"]+'</div></div>'}
+document.getElementById("mcr").innerHTML=html;document.getElementById("mcr").style.display="";
+
+// 渲染直方图
+setTimeout(function(){
+function drawHist(elId,hist,color,unit){
+var el=document.getElementById(elId);
+if(!el)return;
+var bins=hist.bins,counts=hist.counts;
+// 计算 bin 中心作为 x 坐标
+var data=[];
+for(var i=0;i<counts.length;i++){data.push([round((bins[i]+bins[i+1])/2,2),counts[i]])}
+var markLines=[];
+if(hist["原始位置"]!=null){markLines.push({xAxis:hist["原始位置"],lineStyle:{color:"#DC2626",width:2,type:"solid"},label:{formatter:"原始",color:"#DC2626",position:"insideEndTop"}})}
+if(hist["5分位"]!=null){markLines.push({xAxis:hist["5分位"],lineStyle:{color:"#F59E0B",width:1.5,type:"dashed"},label:{formatter:"5%",color:"#F59E0B",position:"insideEndTop"}})}
+if(hist["中位数"]!=null){markLines.push({xAxis:hist["中位数"],lineStyle:{color:"#94A3B8",width:1,type:"dashed"},label:{formatter:"中位",color:"#94A3B8",position:"insideStartTop"}})}
+if(hist["95分位"]!=null){markLines.push({xAxis:hist["95分位"],lineStyle:{color:"#059669",width:1.5,type:"dashed"},label:{formatter:"95%",color:"#059669",position:"insideEndTop"}})}
+var c=echarts.init(el);
+c.setOption({
+grid:{left:55,right:25,top:30,bottom:50},
+tooltip:{trigger:"axis",formatter:function(p){var v=p[0];return "收益率: "+(v.value[0]>=0?"+":"")+fm(v.value[0],2)+unit+"<br/>频次: "+v.value[1]}},
+xAxis:{type:"value",name:"收益率%",axisLabel:{color:"#94A3B8",formatter:function(v){return (v>=0?"+":"")+v+"%"}},splitLine:{lineStyle:{color:"#E2E8F0"}},axisLine:{lineStyle:{color:"#E2E8F0"}}},
+yAxis:{type:"value",name:"频次",axisLabel:{color:"#94A3B8"},splitLine:{lineStyle:{color:"#E2E8F0"}},axisLine:{show:false}},
+series:[{type:"bar",data:data,itemStyle:{color:color,borderRadius:[2,2,0,0]},barWidth:"90%",markLine:{silent:true,symbol:"none",data:markLines}}]
+});
+window.addEventListener("resize",function(){c.resize()});
+setTimeout(function(){c.resize()},300);
+}
+function round(v,d){var f=Math.pow(10,d);return Math.round(v*f)/f}
+if(retHist.bins)drawHist("mcchart1",retHist,"#4F46E5","%");
+// 回撤直方图: 用红色系，x 轴标签为回撤(负数)
+if(ddHist.bins){
+var el2=document.getElementById("mcchart2");
+if(el2){
+var bins=ddHist.bins,counts=ddHist.counts;
+var data=[];
+for(var i=0;i<counts.length;i++){data.push([round((bins[i]+bins[i+1])/2,2),counts[i]])}
+var ml=[];
+if(ddHist["原始位置"]!=null)ml.push({xAxis:ddHist["原始位置"],lineStyle:{color:"#DC2626",width:2,type:"solid"},label:{formatter:"原始",color:"#DC2626",position:"insideEndTop"}});
+if(ddHist["5分位"]!=null)ml.push({xAxis:ddHist["5分位"],lineStyle:{color:"#DC2626",width:1.5,type:"dashed"},label:{formatter:"最差5%",color:"#DC2626",position:"insideStartTop"}});
+if(ddHist["95分位"]!=null)ml.push({xAxis:ddHist["95分位"],lineStyle:{color:"#059669",width:1.5,type:"dashed"},label:{formatter:"最优5%",color:"#059669",position:"insideEndTop"}});
+var c2=echarts.init(el2);
+c2.setOption({
+grid:{left:55,right:25,top:30,bottom:50},
+tooltip:{trigger:"axis",formatter:function(p){var v=p[0];return "回撤: "+fm(v.value[0],2)+"%<br/>频次: "+v.value[1]}},
+xAxis:{type:"value",name:"回撤%",axisLabel:{color:"#94A3B8",formatter:function(v){return v+"%"}},splitLine:{lineStyle:{color:"#E2E8F0"}},axisLine:{lineStyle:{color:"#E2E8F0"}}},
+yAxis:{type:"value",name:"频次",axisLabel:{color:"#94A3B8"},splitLine:{lineStyle:{color:"#E2E8F0"}},axisLine:{show:false}},
+series:[{type:"bar",data:data,itemStyle:{color:"#F87171",borderRadius:[2,2,0,0]},barWidth:"90%",markLine:{silent:true,symbol:"none",data:ml}}]
+});
+window.addEventListener("resize",function(){c2.resize()});
+setTimeout(function(){c2.resize()},300);
+}
+}
+},200);
 }
 
 document.getElementById("bc").addEventListener("keydown",function(e){if(e.key==="Enter")runBacktest()});
+
+// 修复: 结束日期默认设为今天，避免硬编码过期日期（原 value="2026-06-24" 在该日期后会让回测静默使用过去日期）
+(function(){
+var t=new Date();
+var pad=function(n){return String(n).padStart(2,"0")};
+var today=t.getFullYear()+"-"+pad(t.getMonth()+1)+"-"+pad(t.getDate());
+["bed","mced"].forEach(function(id){var el=document.getElementById(id);if(el)el.value=today;});
+})();
 </script>
 </body>
 </html>

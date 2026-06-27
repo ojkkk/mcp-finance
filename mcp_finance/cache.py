@@ -142,6 +142,9 @@ class CacheManager:
     ):
         self.memory = TTLCache(default_ttl=mem_ttl)
         self.disk = DiskCacheStore(disk_dir, default_ttl=disk_ttl) if disk_dir else None
+        # BUG-H5 修复: get_or_fetch 的 per-key 锁，防止缓存惊群（thundering herd）
+        self._fetch_locks: dict[str, threading.Lock] = {}
+        self._fetch_locks_guard = threading.Lock()
 
     def get(self, key: str, default: Any = None, layer: str = "mem") -> Any:
         if layer == "mem":
@@ -163,11 +166,25 @@ class CacheManager:
         layer: str = "mem",
         ttl: float | None = None,
     ) -> Any:
-        """缓存未命中时自动调用 fetch_fn 并缓存"""
+        """缓存未命中时自动调用 fetch_fn 并缓存（线程安全，防止缓存惊群）"""
+        # 第一重检查：快速路径，命中直接返回
         val = self.get(key, layer=layer)
         if val is not None:
             return val
-        val = fetch_fn()
-        if val is not None:
-            self.set(key, val, layer=layer, ttl=ttl)
-        return val
+
+        # BUG-H5 修复: per-key 锁，确保同一 key 的并发 fetch 只执行一次
+        with self._fetch_locks_guard:
+            lock = self._fetch_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._fetch_locks[key] = lock
+
+        with lock:
+            # 第二重检查：持锁后再查一次，可能其他线程已经填充
+            val = self.get(key, layer=layer)
+            if val is not None:
+                return val
+            val = fetch_fn()
+            if val is not None:
+                self.set(key, val, layer=layer, ttl=ttl)
+            return val

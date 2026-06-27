@@ -53,17 +53,18 @@ function fmtVol(n) {
 function pctClass(v) { if (v == null) return ""; return v > 0 ? "up" : v < 0 ? "down" : "text-slate-400"; }
 function pctSign(v) { if (v == null) return "--"; return (v > 0 ? "+" : "") + fmt(v) + "%"; }
 
-// Nav highlight
+// Nav highlight — 与 backtest.html / index.html / screener.html 的 .nav-item 类对齐
+// BUG-17 修复: 原来引用不存在的 .nav-link 类，从未生效；改为 .nav-item
 (function() {
-  var links = document.querySelectorAll('.nav-link');
+  var links = document.querySelectorAll('.nav-item');
   var p = window.location.pathname;
   links.forEach(function(l) {
     var href = l.getAttribute('href');
     var active = (p === '/' && href === '/') || (p !== '/' && href !== '/' && p === href);
     if (active) {
-      l.className = 'nav-link px-3 py-1.5 rounded-md text-sm bg-accent/20 text-accent font-medium cursor-pointer transition-colors duration-200';
+      l.classList.add('active');
     } else {
-      l.className = 'nav-link px-3 py-1.5 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-bg-hover cursor-pointer transition-colors duration-200';
+      l.classList.remove('active');
     }
   });
 })();

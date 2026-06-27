@@ -65,26 +65,43 @@ def analyze_stock(code: str) -> dict:
             "MA60": snapshot.get("MA60"),
             "MACD_DIF": snapshot.get("MACD_DIF"),
             "MACD_DEA": snapshot.get("MACD_DEA"),
-            "MACD柱": snapshot.get("MACD柱"),
+            "MACD_BAR": snapshot.get("MACD_BAR"),
             "KDJ_K": snapshot.get("KDJ_K"),
             "KDJ_D": snapshot.get("KDJ_D"),
             "KDJ_J": snapshot.get("KDJ_J"),
-            "RSI_14": snapshot.get("RSI_14"),
-            "BOLL上轨": snapshot.get("BOLL_upper"),
-            "BOLL中轨": snapshot.get("BOLL_mid"),
-            "BOLL下轨": snapshot.get("BOLL_lower"),
+            "RSI_14": snapshot.get("RSI14"),
+            "BOLL上轨": snapshot.get("BOLL_UPPER"),
+            "BOLL中轨": snapshot.get("BOLL_MID"),
+            "BOLL下轨": snapshot.get("BOLL_LOWER"),
             "当前信号": signals[:5] if signals else [],
         }
 
     # ── 3. 财务数据（多市场）──
+    # BUG-C4 修复: handle_financials 对 A股返回 {"财务指标":..., "历史明细": {"数据":[...]}}，
+    # 顶层无 "数据" key；港美股返回 {"数据": [...]}。需兼容两种结构。
     financials = {}
     try:
         fin = handle_financials({"code": code, "market": market, "count": 4})
         if isinstance(fin, list):
             fin = {"数据": fin}
-        if fin and "error" not in fin and "数据" in fin:
-            financials["最近期数"] = fin.get("财务期数", 0)
-            financials["数据"] = fin["数据"]
+        if fin and "error" not in fin:
+            # A股结构: 顶层有 "财务指标" + "历史明细"
+            if "历史明细" in fin:
+                hist = fin["历史明细"]
+                if isinstance(hist, dict) and "数据" in hist:
+                    financials["最近期数"] = fin.get("财务期数", 0)
+                    financials["数据"] = hist["数据"]
+                elif isinstance(hist, list):
+                    financials["最近期数"] = fin.get("财务期数", 0)
+                    financials["数据"] = hist
+                # 提取核心指标供评分使用
+                indicators = fin.get("财务指标", {})
+                if isinstance(indicators, dict) and indicators:
+                    financials["指标"] = indicators
+            # 港美股结构: 顶层有 "数据"
+            elif "数据" in fin:
+                financials["最近期数"] = fin.get("财务期数", 0)
+                financials["数据"] = fin["数据"]
     except Exception:
         pass
 
@@ -115,8 +132,6 @@ def analyze_stock(code: str) -> dict:
     }
 
 
-def handle_analyze_stock(arguments: dict) -> dict:
-    return analyze_stock(arguments["code"])
 def handle_analyze_stock(arguments: dict) -> dict:
     return analyze_stock(arguments["code"])
 
@@ -405,9 +420,13 @@ def _compute_stock_score(quote: dict, tech: dict, financials: dict) -> dict:
     # 财务面 (20分)
     fin_score = 10
     fin_data = financials.get("数据", [])
+    # BUG-C4 补充: 兼容 A股同花顺历史明细的多种 ROE 字段名
     if fin_data and len(fin_data) > 0:
         latest_fin = fin_data[0]
-        roe_val = latest_fin.get("净资产收益率")
+        roe_val = (latest_fin.get("净资产收益率")
+                   or latest_fin.get("ROE")
+                   or latest_fin.get("加权净资产收益率")
+                   or latest_fin.get("净资产收益率(%)"))
         if roe_val is not None:
             try:
                 roe = float(roe_val)
@@ -418,6 +437,20 @@ def _compute_stock_score(quote: dict, tech: dict, financials: dict) -> dict:
                     fin_score += 3
             except (ValueError, TypeError):
                 pass
+        # 兼容从 "指标" 字段取 ROE（A股 handle_financials 返回的财务指标结构）
+        elif financials.get("指标"):
+            ind = financials["指标"]
+            roe_field = ind.get("盈利能力", {}).get("ROE(%)") if isinstance(ind.get("盈利能力"), dict) else None
+            if roe_field is not None:
+                try:
+                    roe = float(roe_field)
+                    if roe > 15:
+                        fin_score += 8
+                        reasons.append(f"高ROE({roe}%)")
+                    elif roe > 5:
+                        fin_score += 3
+                except (ValueError, TypeError):
+                    pass
     fin_score = max(0, min(20, fin_score))
     score += fin_score - 10
 

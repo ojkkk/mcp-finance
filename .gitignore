@@ -30,6 +30,33 @@ env/
 **/.kline_cache/
 **/.financial_cache/
 
+# AI Agent 工作目录（CodeBuddy / Claude / Cursor / Aider 等）
+.workbuddy/
+.claude/
+.cursor/
+.aider*
+.continue/
+.codeium/
+
+# IDE / 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 日志文件
+*.log
+logs/
+
+# 本地调试 / 临时脚本（不进版本库）
+_debug_*
+_test_*
+_temp_*
+_server_*
+_srv*
+scratch_*
+
 # 敏感配置 — 绝对不能提交
 .env
 .env.local
