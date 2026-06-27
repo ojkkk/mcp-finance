@@ -22,7 +22,7 @@ class TestCorrelationMatrix:
         result = get_correlation_matrix(["600519"])
         assert result.get("error") is True
 
-    def test_self_correlation_is_one():
+    def test_self_correlation_is_one(self):
         """同一只股票自相关应为 1（需 mock，这里只验证接口不崩）"""
         # 实际网络调用留集成测试
         pass

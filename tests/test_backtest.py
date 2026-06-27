@@ -51,7 +51,7 @@ class TestExtractMetric:
         """未知 metric 应回退到总收益率"""
         assert _extract_metric({"总收益率(%)": 10}, "unknown") == 10
 
-    def test_mdd_direction_consistency():
+    def test_mdd_direction_consistency(self):
         """C3 核心验证：两个回撤，小的（-5）应在 maximize 下优于大的（-15）"""
         small_dd = _extract_metric({"最大回撤(%)": -5}, "mdd")   # -5
         big_dd = _extract_metric({"最大回撤(%)": -15}, "mdd")    # -15
