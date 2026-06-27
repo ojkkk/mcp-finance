@@ -1,46 +1,72 @@
 <div align="center">
 
-<!-- Animated gradient title -->
-<svg width="560" height="70" viewBox="0 0 560 70" xmlns="http://www.w3.org/2000/svg">
+<!-- 🌊 Top waving dynamic background -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,20:0EA5E9,50:8B5CF6,80:EC4899,100:4F46E5&height=140&section=header&fontSize=0&desc=&descAlignY=70&descAlign=50" width="100%">
+
+<!-- ✨ Large animated glowing title -->
+<svg width="820" height="130" viewBox="0 0 820 130" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="brand" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#4F46E5">
-        <animate attributeName="stop-color" values="#4F46E5;#0EA5E9;#8B5CF6;#4F46E5" dur="5s" repeatCount="indefinite"/>
+        <animate attributeName="stop-color" values="#4F46E5;#0EA5E9;#8B5CF6;#EC4899;#4F46E5" dur="6s" repeatCount="indefinite"/>
       </stop>
-      <stop offset="100%" stop-color="#0EA5E9">
-        <animate attributeName="stop-color" values="#0EA5E9;#8B5CF6;#4F46E5;#0EA5E9" dur="5s" repeatCount="indefinite"/>
+      <stop offset="50%" stop-color="#0EA5E9">
+        <animate attributeName="stop-color" values="#0EA5E9;#8B5CF6;#EC4899;#4F46E5;#0EA5E9" dur="6s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" stop-color="#8B5CF6">
+        <animate attributeName="stop-color" values="#8B5CF6;#EC4899;#4F46E5;#0EA5E9;#8B5CF6" dur="6s" repeatCount="indefinite"/>
       </stop>
     </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
-  <text x="50%" y="50" text-anchor="middle" font-size="42" font-weight="700" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" fill="url(#brand)">
+  <text x="50%" y="88" text-anchor="middle" font-size="80" font-weight="800" letter-spacing="-3" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" fill="url(#brand)" filter="url(#glow2)">
     mcp-markets
+    <animate attributeName="opacity" values="0.8;1;0.8" dur="3s" repeatCount="indefinite"/>
+  </text>
+  <text x="50%" y="88" text-anchor="middle" font-size="80" font-weight="800" letter-spacing="-3" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" fill="url(#brand)" filter="url(#glow)">
+    mcp-markets
+    <animate attributeName="opacity" values="0.9;1;0.9" dur="3s" repeatCount="indefinite"/>
   </text>
 </svg>
 
+<!-- 💫 Animated typing subtitle -->
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&pause=800&color=6366F1&center=true&vCenter=true&width=600&lines=Global+Financial+Market+MCP+Server;AI+Eyes+on+A-Shares+%C2%B7+HK+%C2%B7+US+%C2%B7+Futures;31+MCP+Tools+%C2%B7+4+Data+Sources;9+Backtest+Strategies+%C2%B7+Bayesian+Optimization" alt="typing">
+
 <p align="center">
-  <strong style="font-size:18px">Global Financial Market MCP Server</strong><br>
-  <em>Give your AI assistant eyes on China A-Shares · HK · US Stocks · Futures</em>
+  <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/v/mcp-markets?color=4F46E5&label=PyPI&style=for-the-badge" alt="PyPI"></a>
+  <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/pyversions/mcp-markets?color=0EA5E9&style=for-the-badge" alt="Python"></a>
+  <a href="https://github.com/ojkkk/mcp-finance"><img src="https://img.shields.io/github/stars/ojkkk/mcp-finance?style=for-the-badge&color=FB923C" alt="Stars"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge" alt="MIT"></a>
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/v/mcp-markets?color=4F46E5&label=PyPI" alt="PyPI"></a>
-  <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/pyversions/mcp-markets?color=0EA5E9" alt="Python"></a>
-  <a href="https://github.com/ojkkk/mcp-finance"><img src="https://img.shields.io/github/stars/ojkkk/mcp-finance?style=social" alt="Stars"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-10B981" alt="MIT"></a>
-  <br>
-  <img src="https://img.shields.io/badge/Tools-31-8B5CF6" alt="31 Tools">
-  <img src="https://img.shields.io/badge/A_Shares-%E2%9C%93-EF4444" alt="A Shares">
-  <img src="https://img.shields.io/badge/HK_Stocks-%E2%9C%93-F97316" alt="HK">
-  <img src="https://img.shields.io/badge/US_Stocks-%E2%9C%93-3B82F6" alt="US">
-  <img src="https://img.shields.io/badge/Futures-%E2%9C%93-14B8A6" alt="Futures">
+  <img src="https://img.shields.io/badge/Tools-31-8B5CF6?style=flat-square" alt="31 Tools">
+  <img src="https://img.shields.io/badge/A_Shares-%E2%9C%93-EF4444?style=flat-square" alt="A Shares">
+  <img src="https://img.shields.io/badge/HK_Stocks-%E2%9C%93-F97316?style=flat-square" alt="HK">
+  <img src="https://img.shields.io/badge/US_Stocks-%E2%9C%93-3B82F6?style=flat-square" alt="US">
+  <img src="https://img.shields.io/badge/Futures-%E2%9C%93-14B8A6?style=flat-square" alt="Futures">
 </p>
 
-<!-- Animated typing tagline -->
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=14&pause=1000&color=4F46E5&center=true&vCenter=true&width=480&lines=%E2%9A%A1+Millisecond-level+A-share+quotes;%F0%9F%93%88+9+backtest+strategies;%F0%9F%94%8D+11-dimension+stock+screener;%F0%9F%8C%90+HK%C2%B7US%C2%B7Futures+all+in+one" alt="typing">
-</p>
+<!-- 🎬 Animated scrolling capability tags -->
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=15&pause=600&color=0EA5E9&center=true&vCenter=true&width=540&lines=%E2%9A%A1+Millisecond+A-share+quotes;%F0%9F%93%88+9+strategies+%C2%B7+Bayesian+optimization;%F0%9F%94%8D+11-dimension+screener+%C2%B7+5-factor+ranking;%F0%9F%8C%90+HK+%C2%B7+US+%C2%B7+Futures+all-in-one;%F0%9F%96%A5%87+Flask+Dashboard+%C2%B7+Plotly+%C2%B7+ECharts;%F0%9F%9B%A1%EF%B8%8F+Walk-Forward+%C2%B7+Monte+Carlo+%C2%B7+Anti-overfit" alt="typing">
 
 </div>
+
+<!-- Bottom wave -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,50:8B5CF6,100:EC4899&height=80&section=footer&fontSize=0" width="100%">
 
 ---
 
