@@ -131,6 +131,8 @@ graph LR
 |------|-------------|------------|
 | `backtest_strategy` | Single-stock strategy backtest | MA Cross · MACD · RSI · KDJ · BOLL · Turtle · Vol Trend · Mean Reversion · Custom Combo |
 | `optimize_strategy` | Grid search / Optuna TPE Bayesian optimization | Auto-pruning + parameter importance |
+| `walk_forward` | Walk-Forward out-of-sample validation | Rolling train/test · overfitting assessment |
+| `monte_carlo_test` | Monte Carlo robustness test | Return reshuffling · probability and drawdown distributions |
 | `portfolio_backtest` | Multi-stock portfolio backtest | Custom weights / equal weight |
 
 ### Market Intelligence
@@ -164,13 +166,14 @@ Built-in Flask dashboard that visualizes all MCP tool capabilities.
 ```bash
 mcp-dashboard              # http://localhost:8080
 mcp-dashboard 3000         # custom port
+mcp-dashboard --host 0.0.0.0  # explicitly allow LAN access
 ```
 
 | Page | Route | Features |
 |------|-------|----------|
 | **Market Overview** | `/` | Indices · Hot stocks · Sector rankings · North flow · K-line lookup · Search |
 | **Screener** | `/screener` | 5-factor ranking + 11-dimension conditional screening |
-| **Backtest** | /backtest | 9 strategies · Grid / Bayesian optimization · Walk-Forward · Monte Carlo (Dashboard only) |
+| **Backtest** | /backtest | 9 strategies · Grid / Bayesian optimization · Walk-Forward · Monte Carlo (Dashboard and MCP) |
 
 > Responsive layout · Plotly / ECharts interactive charts · Live quote refresh
 

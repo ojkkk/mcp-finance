@@ -16,12 +16,12 @@ import os
 import time
 from typing import Any
 
-from mcp_finance.cache import CacheManager
+from mcp_finance.cache import CacheManager, get_cache_dir
 
 _CACHE_TTL = 86400  # 24 小时
 
 _fin_cache = CacheManager(
-    disk_dir=os.path.join(os.path.dirname(__file__), ".financial_cache"),
+    disk_dir=get_cache_dir("financials"),
     disk_ttl=_CACHE_TTL,
 )
 

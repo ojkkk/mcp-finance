@@ -4,11 +4,25 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 import threading
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 _SENTINEL = object()
+
+
+def get_cache_dir(name: str) -> str:
+    """Return a writable per-user cache directory for this application."""
+    override = os.environ.get("MCP_FINANCE_CACHE_DIR")
+    if override:
+        root = Path(override).expanduser()
+    elif os.name == "nt" and os.environ.get("LOCALAPPDATA"):
+        root = Path(os.environ["LOCALAPPDATA"]) / "mcp-finance" / "cache"
+    else:
+        root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "mcp-finance"
+    return str(root / name)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -108,8 +122,27 @@ class DiskCacheStore:
         path = self._path(key)
         with self._lock:
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(value, f, ensure_ascii=False)
+            temp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=os.path.dirname(path),
+                    prefix=".tmp-",
+                    suffix=".json",
+                    delete=False,
+                ) as f:
+                    temp_path = f.name
+                    json.dump(value, f, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temp_path, path)
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
 
     def clear(self) -> None:
         with self._lock:

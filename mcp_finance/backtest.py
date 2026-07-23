@@ -18,7 +18,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 import backtrader as bt
 import pandas as pd
 import numpy as np
-from mcp_finance.api import get_kline_a, get_kline_hk, get_kline_us
+from mcp_finance.api import _call_with_net_timeout, _get_ak, get_kline_a, get_kline_hk, get_kline_us
 from mcp_finance.errors import BacktestError
 
 # ============================================================================
@@ -904,8 +904,34 @@ def _get_index_benchmark(code: str, start_date: str, end_date: str, initial_capi
     if market != "a":
         return None  # 港美股无对应基准指数
     try:
-        # BUG-5 修复: 原来硬编码 "000300"，现在使用传入的 code 参数
-        idx_klines = get_kline_a(code=code, period="daily", adjust="qfq", limit=800)
+        index_symbols = {
+            "000001": "sh000001",
+            "000016": "sh000016",
+            "000300": "sh000300",
+            "000688": "sh000688",
+            "000852": "sh000852",
+            "000905": "sh000905",
+            "399001": "sz399001",
+            "399006": "sz399006",
+        }
+        symbol = index_symbols.get(code)
+        if symbol:
+            df = _call_with_net_timeout(lambda: _get_ak().stock_zh_index_daily(symbol=symbol), timeout=20)
+            idx_klines = []
+            if df is not None and not df.empty:
+                idx_klines = [
+                    {
+                        "日期": str(row.get("date", ""))[:10],
+                        "开盘价": row.get("open"),
+                        "收盘价": row.get("close"),
+                        "最高价": row.get("high"),
+                        "最低价": row.get("low"),
+                        "成交量(手)": row.get("volume"),
+                    }
+                    for _, row in df.tail(800).iterrows()
+                ]
+        else:
+            idx_klines = get_kline_a(code=code, period="daily", adjust="qfq", limit=800)
         if not idx_klines or (isinstance(idx_klines[0], dict) and "error" in idx_klines[0]): return None
         idx_klines = [k for k in idx_klines if "日期" in k and start_date <= k["日期"] <= end_date]
         if len(idx_klines) < 10: return None

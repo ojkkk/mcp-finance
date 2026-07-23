@@ -6,7 +6,7 @@ import sys, os, time, threading, tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
-from mcp_finance.cache import TTLCache, CacheManager, DiskCacheStore
+from mcp_finance.cache import TTLCache, CacheManager, DiskCacheStore, get_cache_dir
 
 
 class TestTTLCache:
@@ -129,3 +129,16 @@ class TestDiskCache:
             c1.set("k", "v")
             c2 = DiskCacheStore(d, default_ttl=60)  # 新实例
             assert c2.get("k") == "v"
+
+    def test_atomic_write_leaves_no_temporary_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            cache = DiskCacheStore(d, default_ttl=60)
+            cache.set("key", {"value": 1})
+
+            assert cache.get("key") == {"value": 1}
+            assert os.listdir(d) == ["key.json"]
+
+
+def test_cache_dir_can_be_overridden(monkeypatch, tmp_path):
+    monkeypatch.setenv("MCP_FINANCE_CACHE_DIR", str(tmp_path))
+    assert get_cache_dir("klines") == str(tmp_path / "klines")

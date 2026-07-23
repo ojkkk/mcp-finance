@@ -685,8 +685,8 @@ def main():
         help="监听端口 (默认: 8080)"
     )
     parser.add_argument(
-        "--host", default="0.0.0.0",
-        help="绑定地址 (默认: 0.0.0.0)"
+        "--host", default="127.0.0.1",
+        help="绑定地址 (默认: 127.0.0.1；局域网访问可显式传 0.0.0.0)"
     )
     args = parser.parse_args()
     print(f"\n  mcp-finance Dashboard v6 -> http://localhost:{args.port}\n")

@@ -13,5 +13,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       - run: pip install ruff
-      - run: ruff check mcp_finance/ --no-fix || true  # lint但不阻塞
+      # Block defects that can fail at runtime while legacy style debt is
+      # cleaned up incrementally.
+      - run: ruff check mcp_finance/ tests/ --select F601,F821,F822,F823
       - run: pytest tests/ -v

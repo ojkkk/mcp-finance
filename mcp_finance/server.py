@@ -173,7 +173,7 @@ async def read_resource(uri: str) -> str:
 
 @server.list_tools()
 async def list_tools() -> list[types.Tool]:
-    return [
+    tools = [
         types.Tool(
             name="get_realtime_quote",
             description="查询全市场实时行情。market: a=A股, hk=港股, us=美股, futures=期货",
@@ -531,7 +531,26 @@ async def list_tools() -> list[types.Tool]:
                 },
             },
         ),
+        types.Tool(
+            name="walk_forward",
+            description="Walk-Forward 样本外验证：滚动训练和测试策略参数，评估策略稳健性与过拟合风险",
+            inputSchema={"type": "object", "properties": {}, "required": ["code"]},
+        ),
+        types.Tool(
+            name="monte_carlo_test",
+            description="蒙特卡洛稳健性检验：重排交易收益序列，估计正收益概率、回撤分布和原策略百分位",
+            inputSchema={"type": "object", "properties": {}, "required": ["code"]},
+        ),
     ]
+
+    # Validators are the source of truth for public tool schemas. This keeps
+    # MCP discovery aligned with the arguments handlers actually accept.
+    if _HAS_VALIDATORS:
+        for tool in tools:
+            validator = _TOOL_VALIDATORS.get(tool.name)
+            if validator is not None:
+                tool.inputSchema = validator.model_json_schema()
+    return tools
 
 
 # ================================================================
@@ -598,30 +617,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextCont
 
     try:
         # 在 asyncio.to_thread 中执行同步 handler，不阻塞事件循环
-        # 临时重定向 stdout → devnull，防止 akshare/easy-tdx 的 print 输出
-        # 污染 MCP JSON-RPC 通信通道（MCP 走 stdio，stdout 只应输出 JSON-RPC）
-        def _safe_handler():
-            # BUG-19 修复: 原来的实现不是异常安全的:
-            # 1. open(os.devnull) 失败时 sys.stdout 未被还原
-            # 2. sys.stdout.close() 在 restore 之前执行，抛异常则 stdout 永久丢失
-            import sys
-            old_stdout = sys.stdout
-            devnull_fh = None
-            try:
-                devnull_fh = open(os.devnull, "w", encoding="utf-8")
-                sys.stdout = devnull_fh
-                return handler(arguments)
-            finally:
-                sys.stdout = old_stdout   # 先还原，确保无论如何都能恢复
-                if devnull_fh is not None:
-                    try:
-                        devnull_fh.close()
-                    except Exception:
-                        pass
-
         # optimize_strategy 需要更长时间
         timeout = 300.0 if name == "walk_forward" else 180.0 if name == "optimize_strategy" else 120.0 if name == "backtest_strategy" else 90.0
-        result = await asyncio.wait_for(asyncio.to_thread(_safe_handler), timeout=timeout)
+        result = await asyncio.wait_for(asyncio.to_thread(handler, arguments), timeout=timeout)
         return [types.TextContent(type="text", text=_format_json(result))]
     except asyncio.TimeoutError:
         logger.error("Tool %s timed out (%.0fs) — thread pool may be exhausted", name, timeout)
@@ -656,6 +654,8 @@ def _format_json(data: Any) -> str:
 # ================================================================
 
 async def main():
+    import sys
+
     logger.info("mcp-finance v%s starting (easy-tdx + AKShare)", __version__)
 
     # ── 启动预热：后台预初始化 TDX 连接和 AKShare 数据 ──
@@ -678,18 +678,26 @@ async def main():
     asyncio.create_task(_warmup())
 
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="mcp-finance",
-                server_version=__version__,
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
+        # The transport captured the original stdout buffer above. Route any
+        # incidental prints from data-source libraries to stderr for the whole
+        # server lifetime instead of mutating sys.stdout in worker threads.
+        original_stdout = sys.stdout
+        sys.stdout = sys.stderr
+        try:
+            await server.run(
+                read_stream,
+                write_stream,
+                InitializationOptions(
+                    server_name="mcp-finance",
+                    server_version=__version__,
+                    capabilities=server.get_capabilities(
+                        notification_options=NotificationOptions(),
+                        experimental_capabilities={},
+                    ),
                 ),
-            ),
-        )
+            )
+        finally:
+            sys.stdout = original_stdout
 
 
 def cli():

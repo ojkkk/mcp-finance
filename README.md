@@ -131,6 +131,8 @@ graph LR
 |------|------|------|
 | `backtest_strategy` | 个股策略回测 | 双均线·MACD·RSI·KDJ·BOLL·海龟·波动率趋势·均值回归·自定义组合 |
 | `optimize_strategy` | 网格扫描 / Optuna TPE 贝叶斯优化 | 自动剪枝 + 参数重要性分析 |
+| `walk_forward` | Walk-Forward 样本外验证 | 滚动训练/测试 · 过拟合评估 |
+| `monte_carlo_test` | 蒙特卡洛稳健性检验 | 收益重排 · 概率与回撤分布 |
 | `portfolio_backtest` | 多股组合回测 | 自定义权重 / 等权分配 |
 
 ### 市场数据
@@ -164,6 +166,7 @@ graph LR
 ```bash
 mcp-dashboard              # http://localhost:8080
 mcp-dashboard 3000         # 指定端口
+mcp-dashboard --host 0.0.0.0  # 显式允许局域网访问
 # 或双击 start_dashboard.bat（Windows）
 ```
 
@@ -171,7 +174,7 @@ mcp-dashboard 3000         # 指定端口
 |------|------|------|
 | **行情总览** | `/` | 大盘指数 · 热门股票 · 板块排行 · 北向资金 · K线速查 · 股票搜索 |
 | **选股器** | `/screener` | 五因子排名 · 条件选股（11维）· 实时筛选 |
-| **策略回测** | /backtest | 9 策略回测 · 网格/贝叶斯优化 · Walk-Forward · 蒙特卡洛（仅 Dashboard 提供） |
+| **策略回测** | /backtest | 9 策略回测 · 网格/贝叶斯优化 · Walk-Forward · 蒙特卡洛（Dashboard 与 MCP 均可用） |
 
 > 响应式布局 · Plotly / ECharts 交互图表 · 实时行情自动刷新
 

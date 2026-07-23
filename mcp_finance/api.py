@@ -17,7 +17,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
-import os, threading
+import os, threading, time
 import pandas as pd
 
 from mcp_finance.logging_config import get_logger as _get_logger
@@ -304,9 +304,9 @@ def _df_to_records(df, limit=None):
 
 
 # ── 统一磁盘缓存（K线）─────────────────────────────────────
-from mcp_finance.cache import CacheManager
+from mcp_finance.cache import CacheManager, get_cache_dir
 _kline_cache = CacheManager(
-    disk_dir=os.path.join(os.path.dirname(__file__), ".kline_cache"),
+    disk_dir=get_cache_dir("klines"),
     disk_ttl=21600,  # 6 小时
 )
 

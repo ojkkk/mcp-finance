@@ -10,7 +10,7 @@ import pytest
 
 # backtrader 可能未安装，单独测试不依赖它的纯函数
 try:
-    from mcp_finance.backtest import _extract_metric, _get_stock_name, _STRATEGY_LABELS
+    from mcp_finance.backtest import _extract_metric, _get_index_benchmark, _get_stock_name, _STRATEGY_LABELS
     HAS_BT = True
 except ImportError:
     HAS_BT = False
@@ -107,3 +107,33 @@ class TestStrategyLabels:
         for label in _STRATEGY_LABELS.values():
             assert isinstance(label, str)
             assert len(label) > 0
+
+
+def test_hs300_benchmark_uses_index_endpoint(monkeypatch):
+    import pandas as pd
+    import mcp_finance.backtest as backtest
+
+    dates = pd.date_range("2026-01-01", periods=12, freq="D")
+    frame = pd.DataFrame({
+        "date": dates,
+        "open": range(100, 112),
+        "close": range(100, 112),
+        "high": range(101, 113),
+        "low": range(99, 111),
+        "volume": [1000] * 12,
+    })
+    observed = []
+
+    class FakeAk:
+        def stock_zh_index_daily(self, symbol):
+            observed.append(symbol)
+            return frame
+
+    monkeypatch.setattr(backtest, "_get_ak", lambda: FakeAk())
+    monkeypatch.setattr(backtest, "_call_with_net_timeout", lambda func, timeout=None: func())
+
+    result = _get_index_benchmark("000300", "2026-01-01", "2026-01-12", 100000)
+
+    assert observed == ["sh000300"]
+    assert result["总收益率(%)"] == 11.0
+    assert len(result["权益曲线"]) == 12
