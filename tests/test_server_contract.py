@@ -3,9 +3,8 @@
 import asyncio
 import io
 import sys
-import tomllib
 from contextlib import redirect_stdout
-from pathlib import Path
+from importlib.metadata import version
 
 from mcp_finance import __version__
 from mcp_finance import server
@@ -56,8 +55,4 @@ def test_call_tool_does_not_replace_process_stdout(monkeypatch):
 
 
 def test_package_and_project_versions_match():
-    project_root = Path(__file__).resolve().parents[1]
-    with (project_root / "pyproject.toml").open("rb") as f:
-        project = tomllib.load(f)
-
-    assert project["project"]["version"] == __version__
+    assert version("mcp-markets") == __version__
