@@ -1,14 +1,16 @@
 <div align="center">
 
-<!-- 🌊 顶部动态波浪 + 大标题（服务端渲染，GitHub 兼容） -->
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,20:0EA5E9,50:8B5CF6,80:EC4899,100:4F46E5&height=200&section=header&text=mcp-finance&fontSize=52&fontColor=ffffff&fontAlignY=38&desc=%E5%85%A8%E5%B8%82%E5%9C%BA%E9%87%91%E8%9E%8D%E6%95%B0%E6%8D%AE%20MCP%20Server&descSize=18&descColor=c4b5fd&descAlignY=68" width="100%">
+**English** | [简体中文](README.zh-CN.md)
 
-<!-- 📝 动态打字副标题：轮播核心卖点 -->
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&pause=900&color=6366F1&center=true&vCenter=true&width=620&lines=AI+%E5%8A%A9%E6%89%8B%E7%9C%8B%E6%87%82+A%E8%82%A1+%C2%B7+%E6%B8%AF%E8%82%A1+%C2%B7+%E7%BE%8E%E8%82%A1+%C2%B7+%E6%9C%9F%E8%B4%A7;31+%E4%B8%AA+MCP+%E5%B7%A5%E5%85%B7+%C2%B7+4+%E5%A4%A7%E6%95%B0%E6%8D%AE%E6%BA%90;9+%E7%A7%8D%E7%AD%96%E7%95%A5%E5%9B%9E%E6%B5%8B+%C2%B7+%E8%B4%9D%E5%8F%B6%E6%96%AF%E4%BC%98%E5%8C%96+%C2%B7+%E9%98%B2%E8%BF%87%E6%8B%9F;%E6%AF%AB%E7%A7%92%E7%BA%A7%E8%A1%8C%E6%83%85+%C2%B7+%E4%BA%A4%E4%BA%92%E5%BC%8FK%E7%BA%BF+%C2%B7+Web+%E7%9C%8B%E6%9D%BF" alt="tagline">
+<!-- 🌊 Top dynamic wave + large title (server-side rendered, GitHub compatible) -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,20:0EA5E9,50:8B5CF6,80:EC4899,100:4F46E5&height=200&section=header&text=mcp-finance&fontSize=52&fontColor=ffffff&fontAlignY=38&desc=Global%20Financial%20Market%20MCP%20Server&descSize=18&descColor=c4b5fd&descAlignY=68" width="100%">
+
+<!-- 📝 Animated typing subtitle: rotating key features -->
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&pause=900&color=6366F1&center=true&vCenter=true&width=620&lines=AI+Eyes+on+A-Shares+%C2%B7+HK+%C2%B7+US+%C2%B7+Futures;31+MCP+Tools+%C2%B7+4+Data+Sources;9+Backtest+Strategies+%C2%B7+Bayesian+Opt+%C2%B7+Anti-Overfit;Millisecond+Quotes+%C2%B7+Interactive+K-line+%C2%B7+Web+Dashboard" alt="typing">
 
 <br>
 
-<!-- 🔵 徽章行 -->
+<!-- 🔵 Badge row -->
 <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/v/mcp-markets?color=4F46E5&logo=pypi&logoColor=fff&style=flat-square&cacheSeconds=1" alt="PyPI Version"></a>
 <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/dm/mcp-markets?color=0EA5E9&logo=pypi&logoColor=fff&style=flat-square" alt="Downloads"></a>
 <a href="https://github.com/ojkkk/mcp-finance"><img src="https://img.shields.io/github/stars/ojkkk/mcp-finance?style=flat-square&color=FB923C" alt="Stars"></a>
@@ -17,69 +19,69 @@
 
 <br>
 
-<!-- 📦 能力标签 -->
+<!-- 📦 Capability tags -->
 <img src="https://img.shields.io/badge/Tools-31-8B5CF6?style=flat-square" alt="31 Tools">
-<img src="https://img.shields.io/badge/A%E8%82%A1-%E2%9C%93-EF4444?style=flat-square" alt="A Shares">
-<img src="https://img.shields.io/badge/%E6%B8%AF%E8%82%A1-%E2%9C%93-F97316?style=flat-square" alt="HK">
-<img src="https://img.shields.io/badge/%E7%BE%8E%E8%82%A1-%E2%9C%93-3B82F6?style=flat-square" alt="US">
-<img src="https://img.shields.io/badge/%E6%9C%9F%E8%B4%A7-%E2%9C%93-14B8A6?style=flat-square" alt="Futures">
+<img src="https://img.shields.io/badge/A_Shares-%E2%9C%93-EF4444?style=flat-square" alt="A Shares">
+<img src="https://img.shields.io/badge/HK_Stocks-%E2%9C%93-F97316?style=flat-square" alt="HK">
+<img src="https://img.shields.io/badge/US_Stocks-%E2%9C%93-3B82F6?style=flat-square" alt="US">
+<img src="https://img.shields.io/badge/Futures-%E2%9C%93-14B8A6?style=flat-square" alt="Futures">
 
 </div>
 
 ---
 
-## ⚡ 快速开始
+## ⚡ Quick Start
 
 ```bash
 pip install mcp-markets
 
-# 方式一：作为 MCP Server 运行（供 Claude / Codex / Cursor 调用）
+# Mode 1: Run as an MCP Server (for Claude / Codex / Cursor)
 python -m mcp_finance.server
 
-# 方式二：启动内置 Web Dashboard
-mcp-dashboard              # 默认 http://localhost:8080
+# Mode 2: Launch the built-in Web Dashboard
+mcp-dashboard              # default http://localhost:8080
 ```
 
-> Python 3.10+ · MCP Python SDK 2.x · 零配置即可使用 · 可选设置 `TUSHARE_TOKEN` 环境变量启用高级财务数据
+> Python 3.10+ · MCP Python SDK 2.x · Zero config · Optional `TUSHARE_TOKEN` env var for advanced fundamentals
 
 ---
 
-## ✨ 核心能力一览
+## ✨ Capabilities at a Glance
 
-| 模块 | 功能 | 亮点 |
-|------|------|------|
-| 📈 **实时行情** | A股/港股/美股/期货/指数 | easy-tdx 毫秒级，三源自动降级 |
-| 📊 **K线数据** | 日/周/月/分钟 K线，前/后复权 | A股 800 条，港美股 yfinance 兜底 |
-| 🔬 **技术指标** | MA·MACD·KDJ·RSI·BOLL·WR·BIAS | 金叉/死叉/超买超卖自动识别 |
-| 🔍 **选股器** | 11 维条件筛选 + 五因子排名 | 动量·价值·质量·增长·波动 |
-| 🧪 **策略回测** | 9 大策略 + 参数优化 | Backtrader 事件驱动，125× 性能提升 |
-| 💼 **组合分析** | 多股对比 + 相关性矩阵 + 组合回测 | 支持等权/自定义权重 |
-| 🏢 **基本面** | 财务指标 / 机构持仓 / 研报 / 龙虎榜 | AKShare + Tushare 双源 |
-| 🖥️ **Web 看板** | Flask 实时行情 Dashboard | Plotly + ECharts 交互图表 |
+| Module | Capability | Highlight |
+|--------|------------|-----------|
+| 📈 **Real-time Quotes** | A-Share / HK / US / Futures / Indices | easy-tdx millisecond-level with tri-source fallback |
+| 📊 **K-line Data** | Daily / Weekly / Monthly / Minute bars, adj. | 800 bars for A-shares, yfinance fallback for HK/US |
+| 🔬 **Technical Analysis** | MA·MACD·KDJ·RSI·BOLL·WR·BIAS | Auto-detect golden/dead cross & overbought/oversold |
+| 🔍 **Stock Screener** | 11-dimension filter + 5-factor ranking | Momentum · Value · Quality · Growth · Volatility |
+| 🧪 **Backtesting** | 9 strategies + parameter optimization | Backtrader event-driven, 125× performance boost |
+| 💼 **Portfolio** | Multi-stock comparison + correlation + portfolio backtest | Equal-weight or custom weights |
+| 🏢 **Fundamentals** | Financials / Holdings / Research / Dragon-Tiger | AKShare + Tushare dual source |
+| 🖥️ **Web Dashboard** | Flask real-time dashboard | Plotly + ECharts interactive charts |
 
 ---
 
-## 🏗️ 四数据源架构
+## 🏗️ Four-Source Architecture
 
 ```mermaid
 graph LR
-    A["📡 数据源层"] --> B["⚡ easy-tdx<br/>通达信 TCP · <50ms"]
-    A --> C["🌐 AKShare<br/>新浪 / 同花顺 / 东方财富"]
-    A --> D["🌍 yfinance<br/>Yahoo Finance 兜底"]
-    A --> E["📈 Tushare<br/>深度财务 · Token 鉴权"]
+    A["📡 Data Sources"] --> B["⚡ easy-tdx<br/>TDX TCP · <50ms"]
+    A --> C["🌐 AKShare<br/>Sina / THS / EastMoney"]
+    A --> D["🌍 yfinance<br/>Yahoo Finance Fallback"]
+    A --> E["📈 Tushare<br/>Deep Fundamentals · Token"]
 
     B --> F["🔧 31 MCP Tools"]
     C --> F
     D --> F
     E --> F
 
-    F --> G["📈 行情<br/>实时价 / 批量 / K线"]
-    F --> H["🔬 技术分析<br/>MA·MACD·KDJ·RSI·BOLL"]
-    F --> I["📋 选股<br/>条件筛选 · 五因子排名"]
-    F --> J["⚙️ 回测<br/>9 策略 · 贝叶斯优化"]
-    F --> K["📊 组合<br/>多股对比 · 相关性 · Portfolio"]
-    F --> L["🏢 基本面<br/>财务 · 研报 · 龙虎榜 · 大宗"]
-    F --> M["🖥️ Dashboard<br/>Flask Web · 实时刷新"]
+    F --> G["📈 Quotes<br/>Real-time · Batch · K-line"]
+    F --> H["🔬 Technical<br/>MA·MACD·KDJ·RSI·BOLL"]
+    F --> I["📋 Screening<br/>Conditional · 5-Factor"]
+    F --> J["⚙️ Backtest<br/>9 Strategies · Bayesian Opt"]
+    F --> K["📊 Portfolio<br/>Comparison · Correlation"]
+    F --> L["🏢 Fundamentals<br/>Financials · Research · Flow"]
+    F --> M["🖥️ Dashboard<br/>Flask Web · Live Refresh"]
 
     style A fill:#1e1b4b,stroke:#6366f1,color:#fff
     style F fill:#0f172a,stroke:#334155,color:#fff
@@ -94,93 +96,92 @@ graph LR
 
 ---
 
-## 🎯 全部 31 个 MCP 工具
+## 🎯 All 31 MCP Tools
 
-### 行情报价
+### Quotes & Market Data
 
-| 工具 | 功能 | 数据源 | 延迟 |
-|------|------|--------|------|
-| `get_realtime_quote` | 单股实时行情（现价/涨跌幅/量比/换手率） | easy-tdx → AKShare → yfinance | < 100ms |
-| `batch_quotes` | 批量查询多只股票行情 | easy-tdx | < 1s / batch |
-| `get_kline` | 日/周/月 K线 + 前/后复权 | easy-tdx (A股) / AKShare+yfinance (港美股) | < 500ms |
-| `get_minute_kline` | 1/5/15/30/60 分钟 K线（仅 A股） | easy-tdx | < 200ms |
-| `get_market_indices` | A股 / 港股 / 美股 大盘指数 | easy-tdx → AKShare | < 500ms |
-| `get_futures_list` | 国内期货主力合约行情 | AKShare 新浪 | ~1s |
-| `search_stock` | 代码/名称模糊搜索 | 本地映射 | 即时 |
+| Tool | Description | Data Source | Latency |
+|------|-------------|-------------|---------|
+| `get_realtime_quote` | Single-stock real-time quote (price / change / volume ratio / turnover) | easy-tdx → AKShare → yfinance | < 100ms |
+| `batch_quotes` | Batch real-time quotes for multiple stocks | easy-tdx | < 1s / batch |
+| `get_kline` | Daily / Weekly / Monthly K-line with forward/backward adjust | easy-tdx (A) / AKShare+yfinance (HK/US) | < 500ms |
+| `get_minute_kline` | 1/5/15/30/60 minute K-line (A-shares only) | easy-tdx | < 200ms |
+| `get_market_indices` | A-share / HK / US market indices | easy-tdx → AKShare | < 500ms |
+| `get_futures_list` | China commodity & index futures main contracts | AKShare Sina | ~1s |
+| `search_stock` | Fuzzy search by code or name | Local mapping | Instant |
 
-### 技术分析
+### Technical Analysis
 
-| 工具 | 功能 |
-|------|------|
-| `get_technical_indicators` | MA·MACD·KDJ·RSI·BOLL·WR·BIAS + 金叉/死叉/超买超卖/均线排列自动识别 |
-| `plot_kline` | 交互式 K线 HTML（蜡烛图+均线+成交量+MACD/KDJ/RSI 副图） |
+| Tool | Description |
+|------|-------------|
+| `get_technical_indicators` | MA·MACD·KDJ·RSI·BOLL·WR·BIAS + auto signal detection |
+| `plot_kline` | Interactive candlestick HTML with moving averages, volume, MACD/KDJ/RSI sub-charts |
 
-### 选股 & 分析
+### Screening & Analysis
 
-| 工具 | 功能 |
-|------|------|
-| `stock_screener` | 11 维条件选股（涨跌幅/量比/换手率/PE/PB/ROE/市值…） |
-| `factor_screener` | 五因子综合打分排名（动量·价值·质量·增长·波动） |
-| `analyze_stock` | 一站式个股分析报告（行情+技术+财务+综合评分 0-100） |
-| `compare_stocks` | 多股横向对比，按评分排名 |
-| `correlation_matrix` | 收益率相关性矩阵（辅助分散投资） |
+| Tool | Description |
+|------|-------------|
+| `stock_screener` | 11-dimension conditional screening (change / volume ratio / turnover / PE / PB / ROE / market cap…) |
+| `factor_screener` | 5-factor composite scoring & ranking (momentum · value · quality · growth · volatility) |
+| `analyze_stock` | One-stop stock analysis report (quote + technicals + financials + score 0-100) |
+| `compare_stocks` | Multi-stock comparison ranked by score |
+| `correlation_matrix` | Return correlation matrix for diversification |
 
-### 回测 & 优化
+### Backtesting & Optimization
 
-| 工具 | 功能 | 策略 |
-|------|------|------|
-| `backtest_strategy` | 个股策略回测 | 双均线·MACD·RSI·KDJ·BOLL·海龟·波动率趋势·均值回归·自定义组合 |
-| `optimize_strategy` | 网格扫描 / Optuna TPE 贝叶斯优化 | 自动剪枝 + 参数重要性分析 |
-| `walk_forward` | Walk-Forward 样本外验证 | 滚动训练/测试 · 过拟合评估 |
-| `monte_carlo_test` | 蒙特卡洛稳健性检验 | 收益重排 · 概率与回撤分布 |
-| `portfolio_backtest` | 多股组合回测 | 自定义权重 / 等权分配 |
+| Tool | Description | Strategies |
+|------|-------------|------------|
+| `backtest_strategy` | Single-stock strategy backtest | MA Cross · MACD · RSI · KDJ · BOLL · Turtle · Vol Trend · Mean Reversion · Custom Combo |
+| `optimize_strategy` | Grid search / Optuna TPE Bayesian optimization | Auto-pruning + parameter importance |
+| `walk_forward` | Walk-Forward out-of-sample validation | Rolling train/test · overfitting assessment |
+| `monte_carlo_test` | Monte Carlo robustness test | Return reshuffling · probability and drawdown distributions |
+| `portfolio_backtest` | Multi-stock portfolio backtest | Custom weights / equal weight |
 
-### 市场数据
+### Market Intelligence
 
-| 工具 | 功能 |
-|------|------|
-| `get_sector_ranking` | 行业/概念/地域板块涨跌排行 |
-| `get_north_flow` | 北向/南向资金流向 |
-| `get_fund_flow` | 个股主力资金净流入（easy-tdx 毫秒级） |
-| `get_dragon_tiger` | 龙虎榜（营业部买卖明细） |
-| `get_block_trades` | 大宗交易明细 |
-| `get_margin_trading` | 融资融券数据 |
-| `get_macro_data` | 中国宏观经济（GDP/CPI/PMI/M2/外汇储备） |
+| Tool | Description |
+|------|-------------|
+| `get_sector_ranking` | Industry / Concept / Region sector rankings |
+| `get_north_flow` | North/South-bound capital flow (Stock Connect) |
+| `get_fund_flow` | Individual stock fund flow (easy-tdx millisecond-level) |
+| `get_dragon_tiger` | Dragon & Tiger list (broker buy/sell details) |
+| `get_block_trades` | Block trade details |
+| `get_margin_trading` | Margin trading & short selling data |
+| `get_macro_data` | China macroeconomics (GDP / CPI / PMI / M2 / FX reserves) |
 
-### 基本面
+### Fundamentals
 
-| 工具 | 功能 |
-|------|------|
-| `get_financials` | 5 大类 19+ 指标（核心/盈利/成长/风险/营运） |
-| `get_institutional_holdings` | 十大流通股东 / 机构持仓 |
-| `get_research_reports` | 机构研报（评级+目标价） |
-| `comparison_chart` | 多股走势对比图（归一化交互 HTML） |
-| `test_data_sources` | 一键诊断所有数据源可用性 |
+| Tool | Description |
+|------|-------------|
+| `get_financials` | 5 categories, 19+ indicators (core / profitability / growth / risk / operations) |
+| `get_institutional_holdings` | Top 10 shareholders & institutional holdings |
+| `get_research_reports` | Analyst research reports (ratings + price targets) |
+| `comparison_chart` | Multi-stock normalized comparison chart (interactive HTML) |
+| `test_data_sources` | One-click diagnostic of all data source availability |
 
 ---
 
 ## 🖥️ Web Dashboard
 
-内置 Flask Web 界面，可视化所有 MCP 工具能力。
+Built-in Flask dashboard that visualizes all MCP tool capabilities.
 
 ```bash
 mcp-dashboard              # http://localhost:8080
-mcp-dashboard 3000         # 指定端口
-mcp-dashboard --host 0.0.0.0  # 显式允许局域网访问
-# 或双击 start_dashboard.bat（Windows）
+mcp-dashboard 3000         # custom port
+mcp-dashboard --host 0.0.0.0  # explicitly allow LAN access
 ```
 
-| 页面 | 路由 | 功能 |
-|------|------|------|
-| **行情总览** | `/` | 大盘指数 · 热门股票 · 板块排行 · 北向资金 · K线速查 · 股票搜索 |
-| **选股器** | `/screener` | 五因子排名 · 条件选股（11维）· 实时筛选 |
-| **策略回测** | /backtest | 9 策略回测 · 网格/贝叶斯优化 · Walk-Forward · 蒙特卡洛（Dashboard 与 MCP 均可用） |
+| Page | Route | Features |
+|------|-------|----------|
+| **Market Overview** | `/` | Indices · Hot stocks · Sector rankings · North flow · K-line lookup · Search |
+| **Screener** | `/screener` | 5-factor ranking + 11-dimension conditional screening |
+| **Backtest** | /backtest | 9 strategies · Grid / Bayesian optimization · Walk-Forward · Monte Carlo (Dashboard and MCP) |
 
-> 响应式布局 · Plotly / ECharts 交互图表 · 实时行情自动刷新
+> Responsive layout · Plotly / ECharts interactive charts · Live quote refresh
 
 ---
 
-## 🔌 配置 MCP 客户端
+## 🔌 MCP Client Setup
 
 <details>
 <summary><b>Claude Desktop</b></summary>
@@ -221,50 +222,50 @@ codex mcp add mcp-finance -- python -m mcp_finance.server
 ```
 </details>
 
-> **可选：启用 Tushare 财务数据** — 设置环境变量 `TUSHARE_TOKEN=你的token`（注册 [tushare.pro](https://tushare.pro) 免费获取）。未设置时自动降级，不影响基础功能。
+> **Optional: Tushare fundamentals** — Set `TUSHARE_TOKEN=your_token` env var. [Register free](https://tushare.pro). Falls back gracefully without it.
 
 ---
 
-## 🧪 测试 & 开发
+## 🧪 Development & Testing
 
 ```bash
 git clone https://github.com/ojkkk/mcp-finance.git
 cd mcp-finance
 pip install -e ".[dev]"
 
-# 运行测试
+# Run tests
 pytest tests/ -v
 
-# 代码检查
+# Lint
 ruff check mcp_finance/
 ```
 
 ---
 
-## 🌟 AI 对话示例
+## 🌟 AI Conversation Examples
 
-| 场景 | 自然语言提问 |
-|------|------------|
-| 行情 | "茅台现在什么价？" / "腾讯港股和苹果美股今天表现如何？" |
-| 技术分析 | "茅台 MACD 金叉了吗？RSI 到什么位置了？" |
-| 选股 | "找涨超 3%、量比>1.5、PE<30 的股票" / "五因子排名前 20" |
-| 回测 | "双均线(5,20)回测茅台 2024 年全年" / "找茅台最优 MACD 参数" |
-| 组合 | "茅台+宁德+招行等权组合回测近一年" |
-| 分析 | "给我茅台的综合分析报告" / "对比茅台、五粮液、老窖" |
-| 市场 | "最近 CPI 数据" / "北向资金最近在买什么？" |
-| 研报 | "看看机构对茅台的最新评级" |
+| Scenario | Natural Language Query |
+|----------|------------------------|
+| Quote | "What's the price of Moutai (600519)?" / "How are Tencent HK and Apple US doing today?" |
+| Technical | "Is Moutai's MACD golden cross? What's the RSI?" |
+| Screening | "Find A-shares up >3%, volume ratio >1.5, PE <30" / "Top 20 by 5-factor ranking" |
+| Backtest | "Backtest MA cross (5,20) on Moutai for 2024" / "Find the best MACD params for Moutai" |
+| Portfolio | "Backtest equal-weight portfolio of Moutai + CATL + CMB for the past year" |
+| Analysis | "Give me a comprehensive analysis of Moutai" / "Compare Moutai, Wuliangye, Luzhou Laojiao" |
+| Macro | "Show me recent China CPI data" / "What is north-bound capital buying recently?" |
+| Research | "Latest analyst ratings for Moutai" |
 
 ---
 
-## ⚠️ 免责声明
+## ⚠️ Disclaimer
 
-> **本工具仅供学习交流，所有数据仅供参考，不构成任何投资建议。**
+> **This tool is for educational purposes only. All data is for reference and does not constitute investment advice.**
 
-- 数据来源于第三方公开接口与网页爬虫，**不作准确性、完整性、及时性保证**
-- **无自有数据源**，全部依赖 easy-tdx（通达信公开 TCP）/ AKShare（网页爬虫）/ yfinance / Tushare
-- 数据**无合规商业授权**，个人非商用无问题，**企业商用存在版权与合规风险**
-- 回测结果不代表未来表现，**历史收益不预示未来收益**
-- **作者不对任何投资损失承担责任** · 投资有风险，入市需谨慎
+- Data is sourced from third-party public APIs and web scraping, with **no guarantee of accuracy, completeness, or timeliness**
+- **No proprietary data sources**; all data depends on easy-tdx (reverse-engineered TDX protocol), AKShare (web scraping), yfinance, and Tushare
+- **No commercial data license**; personal non-commercial use is acceptable, **commercial use carries copyright and compliance risks**
+- Backtest results do not predict future performance
+- **The author bears no responsibility for any investment losses** · Invest at your own risk
 
 ---
 
@@ -272,7 +273,7 @@ ruff check mcp_finance/
 
 MIT © [mcp-finance](https://github.com/ojkkk/mcp-finance)
 
-<!-- 🌊 底部波浪 -->
+<!-- 🌊 Bottom wave -->
 <div align="center">
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:4F46E5,50:8B5CF6,100:EC4899&height=100&section=footer&fontSize=0" width="100%">
 </div>
