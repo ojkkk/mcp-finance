@@ -37,7 +37,7 @@ Write-Host "  访问地址: http://localhost:$port" -ForegroundColor Green
 Write-Host "  按 Ctrl+C 停止" -ForegroundColor Gray
 Write-Host ""
 
-Set-Location "D:\new idea\Mcp\mcp-stock-cn"
+Set-Location -LiteralPath $PSScriptRoot
 python -m mcp_finance.dashboard.app
 
 Read-Host "`n按 Enter 退出"
