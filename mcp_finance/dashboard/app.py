@@ -13,6 +13,7 @@ from flask import Flask, jsonify, request, render_template
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from mcp_finance import __version__
 from mcp_finance.api import (
     handle_realtime_quote, handle_kline, handle_market_indices,
     handle_north_flow, handle_batch_quotes, _safe_float,
@@ -43,7 +44,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 _log = logging.getLogger("dashboard")
 
-_log.info("mcp-finance Dashboard v6 starting...")
+_log.info("mcp-finance v%s Dashboard v6 starting...", __version__)
 
 app = Flask(__name__,
     template_folder=os.path.join(os.path.dirname(__file__), "templates"),
@@ -78,15 +79,15 @@ def _safe_call(handler, args):
 # ═══════════════ Pages ═══════════════
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", app_version=__version__)
 
 @app.route("/screener")
 def screener_page():
-    return render_template("screener.html")
+    return render_template("screener.html", app_version=__version__)
 
 @app.route("/backtest")
 def backtest_page():
-    return render_template("backtest.html")
+    return render_template("backtest.html", app_version=__version__)
 
 
 # ═══════════════ Market Data ═══════════════
@@ -672,7 +673,6 @@ def api_monte_carlo():
     return jsonify(_safe_call(handle_monte_carlo, args))
 
 
-# ═══════════════ Entry ═══════════════
 # ═══════════════ Entry ═══════════════
 def main():
     import argparse
