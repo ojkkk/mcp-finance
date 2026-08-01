@@ -9,7 +9,7 @@
 <br>
 
 <!-- 🔵 徽章行 -->
-<a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/v/mcp-markets?color=4F46E5&logo=pypi&logoColor=fff&style=flat-square" alt="PyPI Version"></a>
+<a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/v/mcp-markets?color=4F46E5&logo=pypi&logoColor=fff&style=flat-square&cacheSeconds=1" alt="PyPI Version"></a>
 <a href="https://pypi.org/project/mcp-markets/"><img src="https://img.shields.io/pypi/dm/mcp-markets?color=0EA5E9&logo=pypi&logoColor=fff&style=flat-square" alt="Downloads"></a>
 <a href="https://github.com/ojkkk/mcp-finance"><img src="https://img.shields.io/github/stars/ojkkk/mcp-finance?style=flat-square&color=FB923C" alt="Stars"></a>
 <img src="https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=FBD34A&style=flat-square" alt="Python">
