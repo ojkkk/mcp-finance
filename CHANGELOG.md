@@ -1,3 +1,9 @@
+## [0.13.0] - 2026-08-01
+### 变更
+- 迁移到 MCP Python SDK 2.x：`mcp>=2.0.0,<3`，服务端由低层 `Server` 改为 `MCPServer` 高层 API
+- 31 个 MCP 工具的 JSON Schema 改为从 Pydantic validator 动态生成，保留原有参数校验、超时和错误响应
+- Resources 迁移为 v2 静态/模板资源，`stock://{code}/realtime|kline|indicators` 可通过模板发现
+- stdio stdout 隔离改由 SDK v2 传输层负责，移除手动 `sys.stdout` 替换
 ## [0.12.10] - 2026-07-23
 ### 修复
 - 统一包版本、构建版本和 MCP 握手版本为 0.12.10

@@ -40,7 +40,7 @@ python -m mcp_finance.server
 mcp-dashboard              # 默认 http://localhost:8080
 ```
 
-> Python 3.10+ · 零配置即可使用 · 可选设置 `TUSHARE_TOKEN` 环境变量启用高级财务数据
+> Python 3.10+ · MCP Python SDK 2.x · 零配置即可使用 · 可选设置 `TUSHARE_TOKEN` 环境变量启用高级财务数据
 
 ---
 

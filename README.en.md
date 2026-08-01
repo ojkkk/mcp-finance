@@ -40,7 +40,7 @@ python -m mcp_finance.server
 mcp-dashboard              # default http://localhost:8080
 ```
 
-> Python 3.10+ · Zero config · Optional `TUSHARE_TOKEN` env var for advanced fundamentals
+> Python 3.10+ · MCP Python SDK 2.x · Zero config · Optional `TUSHARE_TOKEN` env var for advanced fundamentals
 
 ---
 
